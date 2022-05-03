@@ -1,7 +1,4 @@
-
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Flatten, Conv2D, Softmax
-from tensorflow.keras import Model
 import numpy as np
 import random
 import gym
@@ -14,192 +11,7 @@ from os.path import dirname, join, abspath
 import time
 import metaworld
 
-def get_logger(logger_name):
-    """Get logger with predefined settings."""
-
-    logging.basicConfig(level=logging.DEBUG, format='[%(name)s] %(asctime)s %(message)s',
-                        datefmt='%m/%d/%Y %H:%M:%S')
-    logger = logging.getLogger(logger_name)
-
-    return logger
-
-
-LOGGER = get_logger('PG')
-
 ## ref: https://github.com/pemami4911/deep-rl/blob/master/ddpg/ddpg.py
-
-from collections import deque
-
-
-class ReplayBuffer(object):
-
-    def __init__(self, buffer_size):
-        self.buffer_size = buffer_size
-        self.count = 0
-        self.buffer = deque()
-
-    def add(self, s, a, r, t, s2):
-        experience = (s, a, r, t, s2)
-        if self.count < self.buffer_size: 
-            self.buffer.append(experience)
-            self.count += 1
-        else:
-            self.buffer.popleft()
-            self.buffer.append(experience)
-
-    def size(self):
-        return self.count
-
-    def sample_batch(self, batch_size):
-        '''     
-        batch_size specifies the number of experiences to add 
-        to the batch. If the replay buffer has less than batch_size
-        elements, simply return all of the elements within the buffer.
-        Generally, you'll want to wait until the buffer has at least 
-        batch_size elements before beginning to sample from it.
-        '''
-        batch = []
-
-        if self.count < batch_size:
-            batch = random.sample(self.buffer, self.count)
-        else:
-            batch = random.sample(self.buffer, batch_size)
-
-        s_batch = np.array([_[0] for _ in batch])
-        a_batch = np.array([_[1] for _ in batch])
-        r_batch = np.array([_[2] for _ in batch])
-        t_batch = np.array([_[3] for _ in batch])
-        s2_batch = np.array([_[4] for _ in batch])
-
-        return s_batch, a_batch, r_batch, t_batch, s2_batch
-
-    def clear(self):
-        self.buffer.clear()
-        self.count = 0
-
-
-# class DataManager:
-#     """Record and hold data required during training."""
-
-#     def __init__(self, summary_writer):
-
-#         self.summary_writer = summary_writer
-
-#         self._labels = []
-#         self._rewards = []
-#         self._observations = []
-
-#         self.record_timestamp = None
-
-#         # Load the step from previous trainings
-#         self.episode_number = tf.summary.experimental.get_step()
-#         if not self.episode_number:
-#             self.episode_number = 0
-#             self.episode_number_batch = 0
-
-#         self.start_time = time.time()
-#         self.record_counter = 0
-#         self._last_record_count = 0
-
-#     def record_data(self, observation, reward, action):
-#         """Record data for historical purposes."""
-
-#         if not self._rewards:
-#             self.record_timestamp = time.time()
-
-#         self._observations.append(observation)
-#         self._rewards.append(reward)
-
-
-#         label = action
-
-
-#         self._labels.append(label)
-
-#         self.record_counter += 1
-
-#     # @property
-#     def rewards_discounted(self):
-#         """Compute the discounted reward backwards through time."""
-
-#         reward_his = discount_rewards(self.rewards())
-#         # standardize the rewards to be unit normal
-#         # (helps control the gradient estimator variance)
-#         reward_his -= np.mean(reward_his)
-#         tmp = np.std(reward_his)
-#         if tmp > 0:
-#             reward_his /= tmp  # fix zero-divide
-
-#         return reward_his
-
-#     # @property
-#     def rewards(self):
-#         """Return reward history in numpy array."""
-#         return np.array(self._rewards, dtype=np.float32)
-
-#     # @property
-#     def rewards_episode(self):
-#         """Return reward history in numpy array."""
-#         return np.array(
-#             self._rewards[self._last_record_count: self.record_counter], dtype=np.float32)
-
-#     # @property
-#     def labels(self):
-#         """Return reward history in numpy array."""
-#         return np.array(self._labels, dtype=np.float32)
-
-#     # @property
-#     def observations(self):
-#         """Return reward history in numpy array."""
-#         return np.array(self._observations, dtype=np.uint8)
-
-#     # @property
-#     def record_counter_episode(self):
-#         """Return record counter for single episode."""
-#         return self.record_counter - self._last_record_count
-
-#     def log_summary(self):
-#         """Print out in logs summary about training."""
-
-#         current_time = time.time()
-
-#         fps = 0
-#         if self.record_counter > 2:  # if observation is not empty
-#             fps = self.record_counter / (current_time - self.record_timestamp)
-
-#         LOGGER.debug("%s. T[%.2fs] FPS: %.2f, Reward Sum: %s",
-#                      self.episode_number, current_time - self.start_time, fps,
-#                      sum(self._rewards[self._last_record_count: self.record_counter]))
-
-#     def next_batch(self):
-#         """Clear gathered data and prepare to for next episode."""
-#         batch_reward = sum(self._rewards) / self.episode_number_batch
-#         with self.summary_writer.as_default():
-#             tf.summary.scalar('batch_reward', batch_reward, step=self.episode_number)
-
-#         self._labels = []
-#         self._rewards = []
-#         self._observations = []
-#         self.record_counter = 0
-#         self._last_record_count = 0
-#         self.episode_number_batch = 0
-#         self.record_timestamp = None
-
-#     def next_episode(self):
-#         """Next Episode."""
-
-#         episode_rewards = sum(self._rewards[self._last_record_count: self.record_counter])
-#         episode_record_counter = self.record_counter - self._last_record_count
-
-#         with self.summary_writer.as_default():
-#             tf.summary.scalar('reward', episode_rewards, step=self.episode_number)
-#             tf.summary.scalar('number of records', episode_record_counter, step=self.episode_number)
-
-#         self.episode_number += 1
-#         self.episode_number_batch += 1
-#         self._last_record_count = self.record_counter
-
-#         tf.summary.experimental.set_step(self.episode_number)
 
 
 def discount_rewards(reward_his, gamma=.99):
@@ -217,46 +29,26 @@ def discount_rewards(reward_his, gamma=.99):
     return discounted_r
 
 
-# def set_global_seeds(seed):
-#     """Set global seeds for random generators."""
+class ActorNetwork(object):
+    def init(self, env, learning_rate, tau, batch_size):
+        self.sess = sess
+        self.s_dim = env.observation_space.shape[0]
+        self.a_dim = env.action_space.shape[0]
+        self.learning_rate = learning_rate
+        self.tau = tau
+        self.batch_size = batch_size
 
-#     tf.random.set_seed(seed)
-#     np.random.seed(seed)
-#     random.seed(seed)
+        self.inputs, self.out = self.create_actor_network()
 
+        self.network_params = tf.trainable_variables()
 
+        self.target_inputs, self.target_out = self.create_actor_network()
 
-###### CNN Model 
+        self.target_network_params = tf.trainable_variables()[
+            len(self.network_params):]
 
-# def conv(n_f, r_f, stride, activation, pad='valid', init_scale=1.0, data_format='channels_last'):
-#     """Conv2D wrapper."""
-
-#     layer = Conv2D(
-#         filters=n_f, kernel_size=r_f, strides=stride, padding=pad, activation=activation,
-#         data_format=data_format, kernel_initializer=ortho_init(init_scale)
-#     )
-
-#     return layer
-
-
-class ActorNetwork(object, env):
-
-    self.s_dim = env.observation_space.shape[0]
-    self.a_dim = env.action_space.shape[0]
-    self.learning_rate = learning_rate
-    self.tau = tau
-    self.batch_size = batch_size
-
-
-
-    self.dense_1 = Dense(
-        units=512, kernel_initializer=tf.keras.initializers.Orthogonal(), activation='relu')
-    self.dense_2 = Dense(
-        units=512, kernel_initializer=tf.keras.initializers.Orthogonal(), activation='relu')
-    self.logits = Dense(
-        units=self.a_dim, kernel_initializer=tf.keras.initializers.Orthogonal(), activation='tanh')
-
-    self.network_params = tf.trainable_variables()
+        self.num_trainable_vars = len(
+            self.network_params) + len(self.target_network_params)
 
     def create_actor_network(self):
 
