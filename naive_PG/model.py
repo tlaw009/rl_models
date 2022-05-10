@@ -14,21 +14,6 @@ import metaworld
 ## ref: https://github.com/pemami4911/deep-rl/blob/master/ddpg/ddpg.py
 
 
-def discount_rewards(reward_his, gamma=.99):
-
-    discounted_r = np.zeros_like(reward_his)
-    running_add = 0
-
-    for i in reversed(range(0, reward_his.size)):
-        if reward_his[i] != 0:
-            running_add = 0
-        running_add = running_add * gamma + reward_his[i]
-        discounted_r[i] = running_add
-
-
-    return discounted_r
-
-
 class ActorNetwork(object):
     def init(self, env, learning_rate, tau, batch_size):
         self.sess = sess
@@ -46,6 +31,13 @@ class ActorNetwork(object):
 
         self.target_network_params = tf.trainable_variables()[
             len(self.network_params):]
+
+
+        self.update_target_network_params = [self.target_network_params[i].assign(tf.multiply(self.network_params[i], self.tau) + tf.multiply(self.target_network_params[i], 1. - self.tau)) for i in range(len(self.target_network_params))]
+        
+        self.action_gradient = tf.placeholder(tf.float32, [None, self.a_dim])
+        
+        self.unnormalized_actor_gradients = #implement proper gradient#
 
         self.num_trainable_vars = len(
             self.network_params) + len(self.target_network_params)
@@ -69,6 +61,107 @@ class ActorNetwork(object):
         # # Scale output to -action_bound to action_bound
         # scaled_out = tf.multiply(out, self.action_bound)
         return inputs, out
+
+
+def make_env(name):
+    """Create an environment."""
+    ml1 = metaworld.ML1(name)
+    env = ml1.train_classes[name]()  # Create an environment with task `pick_place`
+    task = random.choice(ml1.train_tasks)
+    env.set_task(task)  # Set task
+
+    obs = env.reset() 
+
+    return env, obs
+
+def learning(env_name, policy, batch_size, summary_writer):
+    """Learning is happening here."""
+
+    data_holder = DataManager(summary_writer)
+
+    env, observation = make_env(env_name)
+    prev_reward = None
+    train_step_count = 0
+    while True:
+
+        if train_step_count == 200:
+            train_step_count = 0
+            observation = env.reset()
+
+            data_holder.next_episode()
+
+            if data_holder.record_counter >= batch_size:
+
+                with summary_writer.as_default():
+                    policy.train_step(
+                        data_holder.observations(),
+                        np.vstack(data_holder.labels()),
+                        np.vstack(data_holder.rewards_discounted()),
+                        step=tf.constant(data_holder.episode_number, dtype=tf.int64)
+                    )
+
+                data_holder.next_batch()
+            elif data_holder.record_counter >= batch_size:
+                data_holder.next_batch()
+
+            time.sleep(0.01)
+
+        env.render()
+
+        policy_input = observation
+        # print("observation: ", policy_input)
+        #########################
+        #epislon greedy sampling#
+        #########################
+        epi = 0.2
+        if np.random.rand() < epi:
+            action = tf.random.uniform([4,], minval=-1., maxval=1., dtype=np.float32)
+        else:
+            action = policy.sample_action(policy_input)
+        # step the environment and get new measurements
+        # print("action: ", action)
+        observation, reward, done, _ = env.step(action)
+        train_step_count = train_step_count + 1
+        data_holder.record_data(policy_input, reward, action)
+
+        if prev_reward != reward:
+            data_holder.log_summary()
+            prev_reward = reward
+
+
+
+
+
+
+if __name__ == "__main__":
+
+    tf.random.set_seed(101)
+    summary_writer = tf.summary.create_file_writer("./current.log")
+
+
+    policy = Policy(4)
+    # policy.load("./current.w")
+    try:
+        learning("pick-place-v2", policy, 32, summary_writer)
+    except (KeyboardInterrupt):
+        policy.save("./current.w")
+
+
+
+# def discount_rewards(reward_his, gamma=.99):
+
+#     discounted_r = np.zeros_like(reward_his)
+#     running_add = 0
+
+#     for i in reversed(range(0, reward_his.size)):
+#         if reward_his[i] != 0:
+#             running_add = 0
+#         running_add = running_add * gamma + reward_his[i]
+#         discounted_r[i] = running_add
+
+
+#     return discounted_r
+
 
 
 # def ortho_init(scale=1.0):
@@ -195,86 +288,3 @@ class ActorNetwork(object):
 #         self.model.load_weights(checkpoint_path)
 
 #         LOGGER.info('Weights loaded from checkpoint file: %s', checkpoint_path)
-
-def make_env(name):
-    """Create an environment."""
-    ml1 = metaworld.ML1(name)
-    env = ml1.train_classes[name]()  # Create an environment with task `pick_place`
-    task = random.choice(ml1.train_tasks)
-    env.set_task(task)  # Set task
-
-    obs = env.reset() 
-
-    return env, obs
-
-def learning(env_name, policy, batch_size, summary_writer):
-    """Learning is happening here."""
-
-    data_holder = DataManager(summary_writer)
-
-    env, observation = make_env(env_name)
-    prev_reward = None
-    train_step_count = 0
-    while True:
-
-        if train_step_count == 200:
-            train_step_count = 0
-            observation = env.reset()
-
-            data_holder.next_episode()
-
-            if data_holder.record_counter >= batch_size:
-
-                with summary_writer.as_default():
-                    policy.train_step(
-                        data_holder.observations(),
-                        np.vstack(data_holder.labels()),
-                        np.vstack(data_holder.rewards_discounted()),
-                        step=tf.constant(data_holder.episode_number, dtype=tf.int64)
-                    )
-
-                data_holder.next_batch()
-            elif data_holder.record_counter >= batch_size:
-                data_holder.next_batch()
-
-            time.sleep(0.01)
-
-        env.render()
-
-        policy_input = observation
-        # print("observation: ", policy_input)
-        #########################
-        #epislon greedy sampling#
-        #########################
-        epi = 0.2
-        if np.random.rand() < epi:
-            action = tf.random.uniform([4,], minval=-1., maxval=1., dtype=np.float32)
-        else:
-            action = policy.sample_action(policy_input)
-        # step the environment and get new measurements
-        # print("action: ", action)
-        observation, reward, done, _ = env.step(action)
-        train_step_count = train_step_count + 1
-        data_holder.record_data(policy_input, reward, action)
-
-        if prev_reward != reward:
-            data_holder.log_summary()
-            prev_reward = reward
-
-
-
-
-
-
-if __name__ == "__main__":
-
-    tf.random.set_seed(101)
-    summary_writer = tf.summary.create_file_writer("./current.log")
-
-
-    policy = Policy(4)
-    # policy.load("./current.w")
-    try:
-        learning("pick-place-v2", policy, 32, summary_writer)
-    except (KeyboardInterrupt):
-        policy.save("./current.w")
