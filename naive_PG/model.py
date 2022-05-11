@@ -93,17 +93,16 @@ class CriticNetwork(object):
     def __init__(self, sess, env, learning_rate, tau, gamma, num_actor_vars):
         self.sess = sess
         self.s_dim = env.observation_space.shape[0]
-        self.a_dim = env.action_space.shape[0]
         self.learning_rate = learning_rate
         self.tau = tau
         self.gamma = gamma
 
 
-        self.inputs, self.action, self.out = self.create_critic_network()
+        self.inputs, self.out = self.create_critic_network()
         
         self.network_params = tf.trainable_variables()[num_actor_vars:]
         
-        self.target_inputs, self.target_action, self.target_out = self.create_critic_network()
+        self.target_inputs, self.target_out = self.create_critic_network()
         
         self.target_network_params = tf.trainable_variables()[(len(self.network_params) + num_actor_vars):]
 
@@ -119,46 +118,41 @@ class CriticNetwork(object):
         self.optimize = tf.train.AdamOptimizer(
             self.learning_rate).minimize(self.loss)
 
-        self.action_grads = tf.gradients(self.out, self.action) # redefine actor loss
+        # self.action_grads = tf.gradients(self.out, self.action) # redefine actor loss
 
 
     def create_critic_network(self):
         inputs = tflearn.input_data(shape=[None, self.s_dim])
-        action = tflearn.input_data(shape=[None, self.a_dim])
-        net = tflearn.fully_connected(inputs, 256)
+        # action = tflearn.input_data(shape=[None, self.a_dim])
+        net = tflearn.fully_connected(inputs, 512)
         net = tflearn.layers.normalization.batch_normalization(net)
         net = tflearn.activations.relu(net)
 
-        state_layer = tflearn.fully_connected(net, 256)
-        action_layer = tflearn.fully_connected(action, 256)
-
-        net = tflearn.activation(
-            tf.matmul(net, state_layer.W) + tf.matmul(action, action_layer.W) + action_layer.b, activation='relu')
+        net = tflearn.fully_connected(inputs, 256)
+        net = tflearn.layers.normalization.batch_normalization(net)
+        net = tflearn.activations.relu(net)
 
         w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
 
         out = tflearn.fully_connected(net, 1, weights_init=w_init)
 
-        return inputs, action, out
+        return inputs, out
 
 
-    def train(self, inputs, action, predicted_q_value):
+    def train(self, inputs, predicted_q_value):
         return self.sess.run([self.out, self.optimize], feed_dict={
             self.inputs: inputs,
-            self.action: action,
             self.predicted_q_value: predicted_q_value
         })
 
-    def predict(self, inputs, action):
+    def predict(self, inputs):
         return self.sess.run(self.out, feed_dict={
             self.inputs: inputs,
-            self.action: action
         })
 
-    def predict_target(self, inputs, action):
+    def predict_target(self, inputs):
         return self.sess.run(self.target_out, feed_dict={
             self.target_inputs: inputs,
-            self.target_action: action
         })
 
     def action_gradients(self, inputs, actions):
@@ -263,8 +257,36 @@ def train(sess, env, args, actor, critic, actor_noise):
                         y_i.append(r_batch[k] + critic.gamma * target_q[k])
 
 
+                predicted_q_value, _ = critic.train(
+                    s_batch, a_batch, np.reshape(y_i, (int(args['minibatch_size']), 1)))
 
+                ep_ave_max_q += np.amax(predicted_q_value)
 
+                # Update the actor policy using the sampled gradient
+                a_outs = actor.predict(s_batch)
+                grads = critic.action_gradients(s_batch, a_outs)
+                actor.train(s_batch, grads[0])
+
+                # Update target networks
+                actor.update_target_network()
+                critic.update_target_network()
+
+            s = s2
+            ep_reward += r
+
+            if terminal:
+
+                summary_str = sess.run(summary_ops, feed_dict={
+                    summary_vars[0]: ep_reward,
+                    summary_vars[1]: ep_ave_max_q / float(j)
+                })
+
+                writer.add_summary(summary_str, i)
+                writer.flush()
+
+                print('| Reward: {:d} | Episode: {:d} | Qmax: {:.4f}'.format(int(ep_reward), \
+                        i, (ep_ave_max_q / float(j))))
+                break
 
 
     env, observation = make_env(env_name)
