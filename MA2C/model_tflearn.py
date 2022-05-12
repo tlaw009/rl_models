@@ -1,8 +1,10 @@
-import tensorflow as tf
+# import tensorflow as tf
+import tensorflow.compat.v1 as tf
+# tf.disable_v2_behavior()
 import numpy as np
 import random
 import gym
-
+import argparse
 import tflearn
 
 import logging
@@ -13,9 +15,58 @@ import metaworld
 
 ## ref: https://github.com/pemami4911/deep-rl/blob/master/ddpg/ddpg.py
 
+from collections import deque
+
+
+class ReplayBuffer(object):
+
+    def __init__(self, buffer_size):
+        self.buffer_size = buffer_size
+        self.count = 0
+        self.buffer = deque()
+
+    def add(self, s, a, r, t, s2):
+        experience = (s, a, r, t, s2)
+        if self.count < self.buffer_size: 
+            self.buffer.append(experience)
+            self.count += 1
+        else:
+            self.buffer.popleft()
+            self.buffer.append(experience)
+
+    def size(self):
+        return self.count
+
+    def sample_batch(self, batch_size):
+        '''     
+        batch_size specifies the number of experiences to add 
+        to the batch. If the replay buffer has less than batch_size
+        elements, simply return all of the elements within the buffer.
+        Generally, you'll want to wait until the buffer has at least 
+        batch_size elements before beginning to sample from it.
+        '''
+        batch = []
+
+        if self.count < batch_size:
+            batch = random.sample(self.buffer, self.count)
+        else:
+            batch = random.sample(self.buffer, batch_size)
+
+        s_batch = np.array([_[0] for _ in batch])
+        a_batch = np.array([_[1] for _ in batch])
+        r_batch = np.array([_[2] for _ in batch])
+        t_batch = np.array([_[3] for _ in batch])
+        s2_batch = np.array([_[4] for _ in batch])
+
+        return s_batch, a_batch, r_batch, t_batch, s2_batch
+
+    def clear(self):
+        self.buffer.clear()
+        self.count = 0
+
 
 class ActorNetwork(object):
-    def init(self, env, action_bound, learning_rate, tau, batch_size):
+    def __init__(self, sess, env, action_bound, learning_rate, tau, batch_size):
         self.sess = sess
         self.s_dim = env.observation_space.shape[0]
         self.a_dim = env.action_space.shape[0]
@@ -41,7 +92,7 @@ class ActorNetwork(object):
         self.unnormalized_actor_gradients = tf.gradients(
                     self.scaled_out, self.network_params, -self.action_gradient)
         
-        self.actor_gradients = list(map(lambda x: tf.div(x, self.batch_size), self.unnormalized_actor_gradients))
+        self.actor_gradients = list(map(lambda x: tf.math.divide(x, self.batch_size), self.unnormalized_actor_gradients))
 
         self.optimize = tf.train.AdamOptimizer(self.learning_rate).\
             apply_gradients(zip(self.actor_gradients, self.network_params))
@@ -88,21 +139,25 @@ class ActorNetwork(object):
     def update_target_network(self):
         self.sess.run(self.update_target_network_params)
 
+    def get_num_trainable_vars(self):
+        return self.num_trainable_vars
+
 
 class CriticNetwork(object):
     def __init__(self, sess, env, learning_rate, tau, gamma, num_actor_vars):
         self.sess = sess
         self.s_dim = env.observation_space.shape[0]
+        self.a_dim = env.action_space.shape[0]
         self.learning_rate = learning_rate
         self.tau = tau
         self.gamma = gamma
 
 
-        self.inputs, self.out = self.create_critic_network()
+        self.inputs, self.action, self.out = self.create_critic_network()
         
         self.network_params = tf.trainable_variables()[num_actor_vars:]
         
-        self.target_inputs, self.target_out = self.create_critic_network()
+        self.target_inputs, self.target_action, self.target_out = self.create_critic_network()
         
         self.target_network_params = tf.trainable_variables()[(len(self.network_params) + num_actor_vars):]
 
@@ -113,17 +168,17 @@ class CriticNetwork(object):
 
         self.predicted_q_value = tf.placeholder(tf.float32, [None, 1])
 
-        self.loss = tflearn.mean_square(self.predicted_q_value, self.out) # need to redefine loss
+        self.loss = tflearn.mean_square(self.predicted_q_value, self.out) 
 
         self.optimize = tf.train.AdamOptimizer(
             self.learning_rate).minimize(self.loss)
 
-        # self.action_grads = tf.gradients(self.out, self.action) # redefine actor loss
+        self.action_grads = tf.gradients(self.loss, self.action) 
 
 
     def create_critic_network(self):
         inputs = tflearn.input_data(shape=[None, self.s_dim])
-        # action = tflearn.input_data(shape=[None, self.a_dim])
+        action = tflearn.input_data(shape=[None, self.a_dim])
         net = tflearn.fully_connected(inputs, 512)
         net = tflearn.layers.normalization.batch_normalization(net)
         net = tflearn.activations.relu(net)
@@ -136,7 +191,7 @@ class CriticNetwork(object):
 
         out = tflearn.fully_connected(net, 1, weights_init=w_init)
 
-        return inputs, out
+        return inputs, action, out
 
 
     def train(self, inputs, predicted_q_value):
@@ -155,10 +210,11 @@ class CriticNetwork(object):
             self.target_inputs: inputs,
         })
 
-    def action_gradients(self, inputs, actions):
+    def action_gradients(self, inputs, actions, predicted_q_value):
         return self.sess.run(self.action_grads, feed_dict={
             self.inputs: inputs,
-            self.action: actions
+            self.action: actions,
+            self.predicted_q_value: predicted_q_value
         })
 
     def update_target_network(self):
@@ -207,9 +263,7 @@ def make_env(name):
     task = random.choice(ml1.train_tasks)
     env.set_task(task)  # Set task
 
-    obs = env.reset() 
-
-    return env, obs
+    return env
 
 def train(sess, env, args, actor, critic, actor_noise):
     """Learning is happening here."""
@@ -247,7 +301,7 @@ def train(sess, env, args, actor, critic, actor_noise):
                 s_batch, a_batch, r_batch, t_batch, s2_batch = \
                     replay_buffer.sample_batch(int(args['minibatch_size']))
                 target_q = critic.predict_target(
-                    s2_batch, actor.predict_target(s2_batch))
+                    s2_batch)
 
                 y_i = []
                 for k in range(int(args['minibatch_size'])):
@@ -258,13 +312,19 @@ def train(sess, env, args, actor, critic, actor_noise):
 
 
                 predicted_q_value, _ = critic.train(
-                    s_batch, a_batch, np.reshape(y_i, (int(args['minibatch_size']), 1)))
+                    s_batch, np.reshape(y_i, (int(args['minibatch_size']), 1)))
 
                 ep_ave_max_q += np.amax(predicted_q_value)
 
                 # Update the actor policy using the sampled gradient
                 a_outs = actor.predict(s_batch)
-                grads = critic.action_gradients(s_batch, a_outs)
+
+                # grads = sess.run(tf.gradients(sess.run(critic.loss,) ,a_outs))
+
+                # define proper actor loss function and apply gradient 
+
+                critic.action_gradients(s_batch, a_outs)
+
                 actor.train(s_batch, grads[0])
 
                 # Update target networks
@@ -289,72 +349,53 @@ def train(sess, env, args, actor, critic, actor_noise):
                 break
 
 
-    env, observation = make_env(env_name)
-    prev_reward = None
-    train_step_count = 0
-    while True:
+def main(args):
 
-        if train_step_count == 200:
-            train_step_count = 0
-            observation = env.reset()
+    with tf.Session() as sess:
+        env = make_env("pick-place-v2")
+        # np.random.seed(int(args['random_seed']))
+        # tf.set_random_seed(int(args['random_seed']))
+        # env.seed(int(args['random_seed']))
+        action_bound = float(env.action_space.high_repr)
+        actor = ActorNetwork(sess, env, action_bound,
+                             float(args['actor_lr']), float(args['tau']),
+                             int(args['minibatch_size']))
+        critic = CriticNetwork(sess, env,
+                               float(args['critic_lr']), float(args['tau']),
+                               float(args['gamma']),
+                               actor.get_num_trainable_vars())
 
-            data_holder.next_episode()
-
-            if data_holder.record_counter >= batch_size:
-
-                with summary_writer.as_default():
-                    policy.train_step(
-                        data_holder.observations(),
-                        np.vstack(data_holder.labels()),
-                        np.vstack(data_holder.rewards_discounted()),
-                        step=tf.constant(data_holder.episode_number, dtype=tf.int64)
-                    )
-
-                data_holder.next_batch()
-            elif data_holder.record_counter >= batch_size:
-                data_holder.next_batch()
-
-            time.sleep(0.01)
-
-        env.render()
-
-        policy_input = observation
-        # print("observation: ", policy_input)
-        #########################
-        #epislon greedy sampling#
-        #########################
-        epi = 0.2
-        if np.random.rand() < epi:
-            action = tf.random.uniform([4,], minval=-1., maxval=1., dtype=np.float32)
-        else:
-            action = policy.sample_action(policy_input)
-        # step the environment and get new measurements
-        # print("action: ", action)
-        observation, reward, done, _ = env.step(action)
-        train_step_count = train_step_count + 1
-        data_holder.record_data(policy_input, reward, action)
-
-        if prev_reward != reward:
-            data_holder.log_summary()
-            prev_reward = reward
-
-
-
+        actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(env.action_space.shape[0]))         
+        train(sess, env, args, actor, critic, actor_noise)
 
 if __name__ == "__main__":
 
-    tf.random.set_seed(101)
-    summary_writer = tf.summary.create_file_writer("./current.log")
+    parser = argparse.ArgumentParser(description='provide arguments for DDPG agent')
 
+    # agent parameters
+    parser.add_argument('--actor-lr', help='actor network learning rate', default=0.0001)
+    parser.add_argument('--critic-lr', help='critic network learning rate', default=0.001)
+    parser.add_argument('--gamma', help='discount factor for critic updates', default=0.99)
+    parser.add_argument('--tau', help='soft target update parameter', default=0.001)
+    parser.add_argument('--buffer-size', help='max size of the replay buffer', default=1000000)
+    parser.add_argument('--minibatch-size', help='size of minibatch for minibatch-SGD', default=64)
 
-    policy = Policy(4)
-    # policy.load("./current.w")
-    try:
-        learning("pick-place-v2", policy, 32, summary_writer)
-    except (KeyboardInterrupt):
-        policy.save("./current.w")
+    # run parameters
+    # parser.add_argument('--env', help='choose the gym env- tested on {Pendulum-v0}', default='Pendulum-v0')
+    parser.add_argument('--random-seed', help='random seed for repeatability', default=1234)
+    parser.add_argument('--max-episodes', help='max num of episodes to do while training', default=50000)
+    parser.add_argument('--max-episode-len', help='max length of 1 episode', default=1000)
+    parser.add_argument('--render-env', help='render the gym env', action='store_true')
+    parser.add_argument('--use-gym-monitor', help='record gym results', action='store_true')
+    parser.add_argument('--monitor-dir', help='directory for storing gym results', default='./results/gym_ddpg')
+    parser.add_argument('--summary-dir', help='directory for storing tensorboard info', default='./results/tf_ddpg')
 
-
+    parser.set_defaults(render_env=False)
+    parser.set_defaults(use_gym_monitor=False)
+    
+    args = vars(parser.parse_args())
+    
+    main(args)
 
 # def discount_rewards(reward_his, gamma=.99):
 
@@ -511,3 +552,53 @@ if __name__ == "__main__":
         #     net, self.a_dim, activation='tanh', weights_init=w_init)
         # # Scale output to -action_bound to action_bound
         # scaled_out = tf.multiply(out, self.action_bound)
+
+    # env, observation = make_env(env_name)
+    # prev_reward = None
+    # train_step_count = 0
+    # while True:
+
+    #     if train_step_count == 200:
+    #         train_step_count = 0
+    #         observation = env.reset()
+
+    #         data_holder.next_episode()
+
+    #         if data_holder.record_counter >= batch_size:
+
+    #             with summary_writer.as_default():
+    #                 policy.train_step(
+    #                     data_holder.observations(),
+    #                     np.vstack(data_holder.labels()),
+    #                     np.vstack(data_holder.rewards_discounted()),
+    #                     step=tf.constant(data_holder.episode_number, dtype=tf.int64)
+    #                 )
+
+    #             data_holder.next_batch()
+    #         elif data_holder.record_counter >= batch_size:
+    #             data_holder.next_batch()
+
+    #         time.sleep(0.01)
+
+    #     env.render()
+
+    #     policy_input = observation
+    #     # print("observation: ", policy_input)
+    #     #########################
+    #     #epislon greedy sampling#
+    #     #########################
+    #     epi = 0.2
+    #     if np.random.rand() < epi:
+    #         action = tf.random.uniform([4,], minval=-1., maxval=1., dtype=np.float32)
+    #     else:
+    #         action = policy.sample_action(policy_input)
+    #     # step the environment and get new measurements
+    #     # print("action: ", action)
+    #     observation, reward, done, _ = env.step(action)
+    #     train_step_count = train_step_count + 1
+    #     data_holder.record_data(policy_input, reward, action)
+
+    #     if prev_reward != reward:
+    #         data_holder.log_summary()
+    #         prev_reward = reward
+
