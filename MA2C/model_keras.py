@@ -3,7 +3,7 @@ import tensorflow as tf
 from tensorflow.keras import layers
 import numpy as np
 import matplotlib.pyplot as plt
-
+import sys
 
 import random
 
@@ -91,14 +91,26 @@ class Buffer:
     def update(self, ta_handle, tc_handle, am_handle, cm_handle, state_batch, action_batch, reward_batch, next_state_batch, gamma, critic_optimizer, actor_optimizer):
         with tf.GradientTape() as tape:
             target_actions = ta_handle(next_state_batch, training=True)
+            # print(tc_handle(
+            #     next_state_batch, training=True
+            # ))
             y = reward_batch + gamma * tc_handle(
                 next_state_batch, training=True
             )
-            print(target_actions)
+
+            print("Y", y)
             critic_value = cm_handle(state_batch, training=True)
+
+            # print("CRITIC VALUE: ")
+            # tf.print(critic_value, output_stream=sys.stderr)
             critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
 
+            # print("CRITIC LOSS: ")
+            # tf.print(critic_loss, output_stream=sys.stderr)
+
+
         critic_grad = tape.gradient(critic_loss, cm_handle.trainable_variables)
+        # print("CRITIC GRADIENT: ", critic_grad)
         critic_optimizer.apply_gradients(
             zip(critic_grad, cm_handle.trainable_variables)
         )
@@ -183,7 +195,7 @@ def training(env_name, a_lr, c_lr, max_epoch, gamma, tau):
             actions = policy(tf_prev_state, actor_model, ou_noise, float(env.action_space.low_repr), float(env.action_space.high_repr))
 
             state, reward, done, info = env.step(actions)
-            print(reward)
+            # print(reward)
             buffer.record((prev_state, actions, reward, state))
 
             episodic_reward += reward
