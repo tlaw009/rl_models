@@ -106,18 +106,18 @@ class Buffer:
             # print("CRITIC VALUE: ", critic_value)
             critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
             # print("CRITIC LOSS: ", critic_loss)
-        critic_grad = tape.gradient(critic_loss, cm_handle.trainable_variables)
+        critic_grad = tape.gradient(critic_loss, critic_model.trainable_variables)
         critic_optimizer.apply_gradients(
-            zip(critic_grad, cm_handle.trainable_variables)
+            zip(critic_grad, critic_model.trainable_variables)
         )
         with tf.GradientTape() as tape:
             actions = actor_model(state_batch, training=True)
             critic_value = critic_model(state_batch, training=True)
             actor_loss = -tf.math.reduce_mean(critic_value)
 
-        actor_grad = tape.gradient(actor_loss, am_handle.trainable_variables)
+        actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
         actor_optimizer.apply_gradients(
-            zip(actor_grad, am_handle.trainable_variables)
+            zip(actor_grad, actor_model.trainable_variables)
         )
 
     # We compute the loss and update parameters
@@ -210,7 +210,7 @@ def policy(state, noise_object):
 
 #################### GLOBAL SETUP ####################
 
-problem = "Pendulum-v0"
+problem = "Pendulum-v1"
 env = gym.make(problem)
 
 num_states = env.observation_space.shape[0]
