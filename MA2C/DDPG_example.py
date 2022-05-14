@@ -270,3 +270,11 @@ plt.plot(avg_reward_list)
 plt.xlabel("Episode")
 plt.ylabel("Avg. Epsiodic Reward")
 plt.show()
+
+
+
+actor_model.save_weights("pendulum_actor.h5")
+critic_model.save_weights("pendulum_critic.h5")
+
+target_actor.save_weights("pendulum_target_actor.h5")
+target_critic.save_weights("pendulum_target_critic.h5")
