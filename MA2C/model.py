@@ -5,29 +5,25 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-import random
+################## GLOBAL SETUP P1 ##################
 
-import argparse
+problem = "Pendulum-v1"
+env = gym.make(problem)
 
-import logging
-import datetime
-from os.path import dirname, join, abspath
-import time
-# import metaworld
+num_states = env.observation_space.shape[0]
+print("Size of State Space ->  {}".format(num_states))
+num_actions = env.action_space.shape[0]
+print("Size of Action Space ->  {}".format(num_actions))
 
+upper_bound = env.action_space.high[0]
+lower_bound = env.action_space.low[0]
+
+print("Max Value of Action ->  {}".format(upper_bound))
+print("Min Value of Action ->  {}".format(lower_bound))
+
+##########*****####################*****##########
 
 #################### Auxiliaries ####################
-
-# def make_env(name):
-#     """Create an environment from metaworld env lists"""
-#     ml1 = metaworld.ML1(name)
-#     env = ml1.train_classes[name]()  # Create an environment with task `pick_place`
-#     task = random.choice(ml1.train_tasks)
-#     env.set_task(task)  # Set task
-
-#     return env
-
-
 
 class OUActionNoise:
     def __init__(self, mean, std_deviation, theta=0.15, dt=1e-2, x_initial=None):
@@ -56,9 +52,7 @@ class OUActionNoise:
         else:
             self.x_prev = np.zeros_like(self.mean)
 
-
 ##########*****####################*****##########
-
 
 
 #################### Replay Buffer ####################
@@ -93,26 +87,33 @@ class Buffer:
 
         self.buffer_counter += 1
 
-
+    # Eager execution is turned on by default in TensorFlow 2. Decorating with tf.function allows
+    # TensorFlow to build a static graph out of the logic and computations in our function.
+    # This provides a large speed up for blocks of code that contain many small TensorFlow operations such as this one.
     @tf.function
-    def update(self, state_batch, action_batch, reward_batch, next_state_batch):
+    def update(
+        self, state_batch, action_batch, reward_batch, next_state_batch,
+    ):
+        # Training and updating Actor & Critic networks.
+        # See Pseudo Code.
         with tf.GradientTape() as tape:
             target_actions = target_actor(next_state_batch, training=True)
             y = reward_batch + gamma * target_critic(
-                next_state_batch, training=True
+                [next_state_batch, target_actions], training=True
             )
-            # print(target_actions)
-            critic_value = critic_model(state_batch, training=True)
-            # print("CRITIC VALUE: ", critic_value)
+            critic_value = critic_model([state_batch, action_batch], training=True)
             critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
-            # print("CRITIC LOSS: ", critic_loss)
+
         critic_grad = tape.gradient(critic_loss, critic_model.trainable_variables)
         critic_optimizer.apply_gradients(
             zip(critic_grad, critic_model.trainable_variables)
         )
+
         with tf.GradientTape() as tape:
             actions = actor_model(state_batch, training=True)
-            critic_value = critic_model(state_batch, training=True)
+            critic_value = critic_model([state_batch, actions], training=True)
+            # Used `-value` as we want to maximize the value given
+            # by the critic for our actions
             actor_loss = -tf.math.reduce_mean(critic_value)
 
         actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
@@ -133,6 +134,7 @@ class Buffer:
         reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
         reward_batch = tf.cast(reward_batch, dtype=tf.float32)
         next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
+
         self.update(state_batch, action_batch, reward_batch, next_state_batch)
 
 
@@ -145,55 +147,50 @@ def update_target(target_weights, weights, tau):
 
 ##########*****####################*****##########
 
-
 #################### Models ####################
 
 def get_actor():
     # Initialize weights between -3e-3 and 3-e3
-    
-
-    # print("DEBUG")
     last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
-    # model = tf.keras.models.Sequential()
 
     inputs = layers.Input(shape=(num_states,))
-    # print("DEBUG")
-    # model.add(layers.Input(shape=(s_d,)))
-
     out = layers.Dense(256, activation="relu")(inputs)
-    # print("DEBUG")
-    # model.add(layers.Dense(64, activation="relu"))
-
-    # print("DEBUG")
     out = layers.Dense(256, activation="relu")(out)
-    # model.add(layers.Dense(64, activation="relu"))
+    outputs = layers.Dense(1, activation="tanh", kernel_initializer=last_init)(out)
 
-    outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
-
+    # Our upper bound is 2.0 for Pendulum.
     outputs = outputs * upper_bound
     model = tf.keras.Model(inputs, outputs)
-
     return model
-
 
 ##################################
 #Modified for TD advantage critic#
 ##################################
+
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_out = layers.Dense(64, activation="relu")(state_input)
+    state_out = layers.Dense(16, activation="relu")(state_input)
+    state_out = layers.Dense(32, activation="relu")(state_out)
 
-    out = layers.Dense(64, activation="relu")(state_out)
+    # Action as input
+    action_input = layers.Input(shape=(num_actions))
+    action_out = layers.Dense(32, activation="relu")(action_input)
 
+    # Both are passed through seperate layer before concatenating
+    concat = layers.Concatenate()([state_out, action_out])
+
+    out = layers.Dense(256, activation="relu")(concat)
+    out = layers.Dense(256, activation="relu")(out)
     outputs = layers.Dense(1)(out)
 
-    # Outputs single value for given state
-    model = tf.keras.Model(state_input, outputs)
+    # Outputs single value for give state-action
+    model = tf.keras.Model([state_input, action_input], outputs)
 
     return model
 
-# define Policy for sampling
+
+
 def policy(state, noise_object):
     sampled_actions = tf.squeeze(actor_model(state))
     noise = noise_object()
@@ -205,27 +202,11 @@ def policy(state, noise_object):
 
     return [np.squeeze(legal_action)]
 
-
 ##########*****####################*****##########
 
-#################### GLOBAL SETUP ####################
+#################### GLOBAL SETUP P2 ####################
 
-problem = "Pendulum-v1"
-env = gym.make(problem)
-
-num_states = env.observation_space.shape[0]
-print("Size of State Space ->  {}".format(num_states))
-num_actions = env.action_space.shape[0]
-print("Size of Action Space ->  {}".format(num_actions))
-
-upper_bound = float(env.action_space.high_repr)
-lower_bound = float(env.action_space.low_repr)
-
-print("Max Value of Action ->  {}".format(upper_bound))
-print("Min Value of Action ->  {}".format(lower_bound))
-
-
-std_dev = 0.15
+std_dev = 0.2
 ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
 actor_model = get_actor()
@@ -234,6 +215,7 @@ critic_model = get_critic()
 target_actor = get_actor()
 target_critic = get_critic()
 
+# Making the weights equal initially
 target_actor.set_weights(actor_model.get_weights())
 target_critic.set_weights(critic_model.get_weights())
 
@@ -244,11 +226,10 @@ actor_lr = 0.001
 critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
 actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
 
-
-total_episodes = 100
+total_episodes = 200
 # Discount factor for future rewards
 gamma = 0.99
-# target network update rate
+# Used to update target networks
 tau = 0.005
 
 buffer = Buffer(50000, 64)
@@ -262,9 +243,9 @@ avg_reward_list = []
 ##########*****####################*****##########
 
 
-
 #################### Training ####################
 
+# Takes about 4 min to train
 for ep in range(total_episodes):
 
     prev_state = env.reset()
@@ -310,13 +291,8 @@ plt.show()
 
 ##########*****####################*****##########
 
+actor_model.save_weights("custom_actor.h5")
+critic_model.save_weights("custom_critic.h5")
 
-#################### Weights saved ####################
-
-actor_model.save_weights("test_actor.h5")
-critic_model.save_weights("test_critic.h5")
-
-target_actor.save_weights("test_target_actor.h5")
-target_critic.save_weights("test_target_critic.h5")
-
-##########*****####################*****##########
+target_actor.save_weights("custom_target_actor.h5")
+target_critic.save_weights("custom_target_critic.h5")
