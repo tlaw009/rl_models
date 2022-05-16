@@ -291,8 +291,8 @@ plt.show()
 
 ##########*****####################*****##########
 
-actor_model.save_weights("custom_actor.h5")
-critic_model.save_weights("custom_critic.h5")
+actor_model.save_weights("weights/custom_actor.h5")
+critic_model.save_weights("weights/custom_critic.h5")
 
-target_actor.save_weights("custom_target_actor.h5")
-target_critic.save_weights("custom_target_critic.h5")
+target_actor.save_weights("weights/custom_target_actor.h5")
+target_critic.save_weights("weights/custom_target_critic.h5")
