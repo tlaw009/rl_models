@@ -156,7 +156,7 @@ def get_actor():
     inputs = layers.Input(shape=(num_states,))
     out = layers.Dense(256, activation="relu")(inputs)
     out = layers.Dense(256, activation="relu")(out)
-    outputs = layers.Dense(1, activation="tanh", kernel_initializer=last_init)(out)
+    outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
 
     # Our upper bound is 2.0 for Pendulum.
     outputs = outputs * upper_bound
