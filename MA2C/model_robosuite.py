@@ -7,15 +7,18 @@ import robosuite as suite
 
 ################## GLOBAL SETUP P1 ##################
 
+obs_keys = ['robot0_joint_pos_cos', 'robot0_joint_pos_sin', 'robot0_joint_vel',
+                 'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos', 'robot0_gripper_qvel', 'object-state',
+                 'robot0_proprio-state', 'gripper_to_cube_pos', 'cube_quat', 'cube_pos']
 
-obs_keys = ['robot0_joint_pos_cos', 'robot0_joint_pos_sin', 'robot0_joint_vel', 'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos', 'robot0_gripper_qvel']
 # problem = "Pendulum-v1"
 # env = gym.make(problem)
 
+
 env = suite.make(
-    env_name="Door", # try with other tasks like "Stack" and "Door"
+    env_name="Lift", # try with other tasks like "Stack" and "Door"
     robots="Panda",  # try with other robots like "Sawyer" and "Jaco"
-    has_renderer=False,
+    has_renderer=True,
     has_offscreen_renderer=False,
     use_camera_obs=False,
 )
@@ -292,7 +295,7 @@ for ep in range(total_episodes):
     while True:
         # Uncomment this to see the Actor in action
         # But not in a python notebook.
-        # env.render()
+        env.render()
 
         tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
