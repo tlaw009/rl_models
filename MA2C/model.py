@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 ################## GLOBAL SETUP P1 ##################
 
-problem = "Pendulum-v1"
+problem = "Humanoid-v3"
 env = gym.make(problem)
 
 num_states = env.observation_space.shape[0]
@@ -90,10 +90,11 @@ class Buffer:
     # Eager execution is turned on by default in TensorFlow 2. Decorating with tf.function allows
     # TensorFlow to build a static graph out of the logic and computations in our function.
     # This provides a large speed up for blocks of code that contain many small TensorFlow operations such as this one.
-    @tf.function
+    # @tf.function
     def update(
         self, state_batch, action_batch, reward_batch, next_state_batch,
     ):
+        # print("UPDATING NETWORK PARAM")
         # Training and updating Actor & Critic networks.
         # See Pseudo Code.
         with tf.GradientTape() as tape:
@@ -112,9 +113,11 @@ class Buffer:
         with tf.GradientTape() as tape:
             actions = actor_model(state_batch, training=True)
             critic_value = critic_model([state_batch, actions], training=True)
+            # print("CRITIC FOR ACTION OPTIMIZE:", critic_value)
             # Used `-value` as we want to maximize the value given
             # by the critic for our actions
             actor_loss = -tf.math.reduce_mean(critic_value)
+        # print("CRITIC FOR ACTION OPTIMIZE:", critic_value)
 
         actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
         actor_optimizer.apply_gradients(
@@ -123,6 +126,7 @@ class Buffer:
 
     # We compute the loss and update parameters
     def learn(self):
+        # print("CALLING LEARN")
         # Get sampling range
         record_range = min(self.buffer_counter, self.buffer_capacity)
         # Randomly sample indices
@@ -140,7 +144,7 @@ class Buffer:
 
 # This update target parameters slowly
 # Based on rate `tau`, which is much less than one.
-@tf.function
+# @tf.function
 def update_target(target_weights, weights, tau):
     for (a, b) in zip(target_weights, weights):
         a.assign(b * tau + a * (1 - tau))
@@ -199,8 +203,8 @@ def policy(state, noise_object):
 
     # We make sure action is within bounds
     legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
-
-    return [np.squeeze(legal_action)]
+    # print(np.squeeze(legal_action.shape))
+    return legal_action
 
 ##########*****####################*****##########
 
@@ -226,13 +230,13 @@ actor_lr = 0.001
 critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
 actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
 
-total_episodes = 200
+total_episodes = 1500
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
 tau = 0.005
 
-buffer = Buffer(50000, 64)
+buffer = Buffer(50000, 128)
 
 
 # To store reward history of each episode
@@ -254,7 +258,7 @@ for ep in range(total_episodes):
     while True:
         # Uncomment this to see the Actor in action
         # But not in a python notebook.
-        # env.render()
+        env.render()
 
         tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 

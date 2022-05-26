@@ -4,8 +4,42 @@ from tensorflow.keras import layers
 import numpy as np
 import matplotlib.pyplot as plt
 import robosuite as suite
+from robosuite import load_controller_config
+import h5py
+from robosuite.utils.mjcf_utils import postprocess_model_xml
+import os
+import json
+import random
 
 ################## GLOBAL SETUP P1 ##################
+
+# demo env setup
+
+demo_path = "/home/tony/rl_demo/1653334277_0912106"
+
+hdf5_path = os.path.join(demo_path, "demo.hdf5")
+
+f = h5py.File(hdf5_path, "r")
+
+env_name = f["data"].attrs["env"]
+
+env_info = json.loads(f["data"].attrs["env_info"])
+
+demo_env = suite.make(
+    **env_info,
+    has_renderer=False,
+    has_offscreen_renderer=False,
+    ignore_done=True,
+    use_camera_obs=False,
+    reward_shaping=True,
+    control_freq=20,
+)
+
+demos = list(f["data"].keys())
+
+# real env setup
+
+config = load_controller_config(default_controller="OSC_POSE")
 
 obs_keys = ['robot0_joint_pos_cos', 'robot0_joint_pos_sin', 'robot0_joint_vel',
                  'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos', 'robot0_gripper_qvel', 'object-state',
@@ -18,8 +52,11 @@ obs_keys = ['robot0_joint_pos_cos', 'robot0_joint_pos_sin', 'robot0_joint_vel',
 env = suite.make(
     env_name="Lift", # try with other tasks like "Stack" and "Door"
     robots="Panda",  # try with other robots like "Sawyer" and "Jaco"
+    controller_configs=config,
     has_renderer=True,
+    ignore_done=False,
     has_offscreen_renderer=False,
+    reward_shaping=True,
     use_camera_obs=False,
 )
 
@@ -36,14 +73,12 @@ print("Size of State Space ->  {}".format(num_states))
 num_actions = env.action_dim
 print("Size of Action Space ->  {}".format(num_actions))
 
-upper_bound = env.action_spec[0][0]
+upper_bound = env.action_spec[1][0]
 lower_bound = env.action_spec[0][0]
 
 print("Max Value of Action ->  {}".format(upper_bound))
 print("Min Value of Action ->  {}".format(lower_bound))
 
-
-epsilon = 0.95
 
 ##########*****####################*****##########
 
@@ -114,7 +149,7 @@ class Buffer:
     # Eager execution is turned on by default in TensorFlow 2. Decorating with tf.function allows
     # TensorFlow to build a static graph out of the logic and computations in our function.
     # This provides a large speed up for blocks of code that contain many small TensorFlow operations such as this one.
-    @tf.function
+    # @tf.function
     def update(
         self, state_batch, action_batch, reward_batch, next_state_batch,
     ):
@@ -136,9 +171,11 @@ class Buffer:
         with tf.GradientTape() as tape:
             actions = actor_model(state_batch, training=True)
             critic_value = critic_model([state_batch, actions], training=True)
+            # critic_value = reward_batch
             # Used `-value` as we want to maximize the value given
             # by the critic for our actions
             actor_loss = -tf.math.reduce_mean(critic_value)
+            # actor_loss = critic_value
 
         actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
         actor_optimizer.apply_gradients(
@@ -164,7 +201,7 @@ class Buffer:
 
 # This update target parameters slowly
 # Based on rate `tau`, which is much less than one.
-@tf.function
+# @tf.function
 def update_target(target_weights, weights, tau):
     for (a, b) in zip(target_weights, weights):
         a.assign(b * tau + a * (1 - tau))
@@ -175,7 +212,7 @@ def update_target(target_weights, weights, tau):
 
 def get_actor():
     # Initialize weights between -3e-3 and 3-e3
-    last_init = tf.random_uniform_initializer(minval=-0.02, maxval=0.02)
+    last_init = tf.random_uniform_initializer(minval=-0.03, maxval=0.03)
 
     inputs = layers.Input(shape=(num_states,))
     # out = layers.Flatten()(inputs)
@@ -221,7 +258,7 @@ def policy(state, noise_object):
     # print(state.shape)
     e_greedy = False
     if np.random.rand() < epsilon:
-        sampled_actions = np.random.randn(env.robots[0].dof)
+        sampled_actions = np.random.randn(num_actions)
         e_greedy = True
     else:
         sampled_actions = tf.squeeze(actor_model(state))
@@ -229,13 +266,20 @@ def policy(state, noise_object):
     noise = noise_object()
     # Adding noise to action
     if e_greedy:
-        sampled_actions = sampled_actions + noise   
+        sampled_actions = sampled_actions + noise  
+        # sampled_actions = sampled_actions 
     else:
         sampled_actions = sampled_actions.numpy() + noise
+        # sampled_actions = sampled_actions.numpy()
+
+    # print("SAMPLED_ACTIONS: ", sampled_actions)
+
     # We make sure action is within bounds
-    # legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
-    # print(np.squeeze(sampled_actions))
-    return [np.squeeze(sampled_actions)]
+    legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
+    # print("BOUNDS: ", lower_bound, upper_bound)
+    # print("LEGAL_ACTION:", legal_action)
+
+    return [np.squeeze(legal_action)]
 
 ##########*****####################*****##########
 
@@ -255,20 +299,78 @@ target_actor.set_weights(actor_model.get_weights())
 target_critic.set_weights(critic_model.get_weights())
 
 # Learning rate for actor-critic models
-critic_lr = 0.002
-actor_lr = 0.001
+critic_lr = 0.003
+actor_lr = 0.002
 
 critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
 actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
 
-total_episodes = 2000
+total_episodes = 3000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
 tau = 0.005
 
-buffer = Buffer(50000, 64)
+buffer = Buffer(50000, 256)
 
+# populate buffer with demo
+demo_sample_count = 0
+
+while demo_sample_count < buffer.buffer_capacity / 4:
+    print("Playing back random episode... (press ESC to quit)")
+
+    # # select an episode randomly
+    demo_ep = random.choice(demos)
+
+    # read the model xml, using the metadata stored in the attribute for this episode
+    model_xml = f["data/{}".format(demo_ep)].attrs["model_file"]
+
+    demo_env.reset()
+    xml = postprocess_model_xml(model_xml)
+    demo_env.reset_from_xml_string(xml)
+    demo_env.sim.reset()
+    # env.viewer.set_camera(0)
+
+    # load the flattened mujoco states
+    demo_states = f["data/{}/states".format(demo_ep)][()]
+
+
+    # load the initial state
+    demo_env.sim.set_state_from_flattened(demo_states[0])
+    demo_prev_state = None
+    demo_env.sim.forward()
+
+    # load the actions and play them back open-loop
+    demo_actions = np.array(f["data/{}/actions".format(demo_ep)][()])
+    demo_num_actions = demo_actions.shape[0]
+
+    for j, action in enumerate(demo_actions):
+        demo_state, demo_reward, demo_done, demo_info = demo_env.step(action)
+        # print("DEMO ACTION, ", action)
+        # print("DEMO REWARD, ", demo_reward)
+        # demo_env.render()
+        demo_state_reshaped = []
+
+        for x in obs_keys:
+            demo_state_reshaped.append(demo_state[x])
+
+        demo_state = np.concatenate(np.array(demo_state_reshaped), axis = None)
+        # print("STATE DIM, ", num_states)
+        if not j == 0:
+            buffer.record((demo_prev_state, action, demo_reward, demo_state))
+            demo_sample_count += 1
+            print("DEMO SAMPLE LOADED: ", demo_sample_count)
+
+        demo_prev_state = demo_state
+
+        if j < demo_num_actions - 1:
+            # ensure that the actions deterministically lead to the same recorded states
+            state_playback = demo_env.sim.get_state().flatten()
+            if not np.all(np.equal(demo_states[j + 1], state_playback)):
+                err = np.linalg.norm(demo_states[j + 1] - state_playback)
+                print(f"[warning] playback diverged by {err:.2f} for ep {demo_ep} at step {j}")
+
+f.close()
 
 # To store reward history of each episode
 ep_reward_list = []
@@ -279,11 +381,18 @@ avg_reward_list = []
 
 
 #################### Training ####################
+best_avg_reward = 0.0
 
-# Takes about 4 min to train
 for ep in range(total_episodes):
 
+    epsilon = 0.99
+    step_index = 1
+    step_max = 5000
+    # avg_reward = np.mean(buffer.reward_buffer)
     prev_state = env.reset()
+
+    # prev_dist_to_goal = np.linalg.norm(prev_state['gripper_to_cube_pos'])
+
     prev_state_reshaped = []
     for x in obs_keys:
         prev_state_reshaped.append(prev_state[x])
@@ -292,7 +401,7 @@ for ep in range(total_episodes):
 
     episodic_reward = 0
 
-    while True:
+    while step_index < step_max:
         # Uncomment this to see the Actor in action
         # But not in a python notebook.
         env.render()
@@ -300,18 +409,30 @@ for ep in range(total_episodes):
         tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
         action = policy(tf_prev_state, ou_noise)[0]
-
+        # print("ACTION: ", action)
+        # print("BUFFER AVG REWARD: ", avg_reward)
         # Recieve state and reward from environment.
         state, reward, done, info = env.step(action)
+        
 
+        # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
+        # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
+
+        # print(reward)
         state_reshaped = []
+
         for x in obs_keys:
             state_reshaped.append(state[x])
 
         state = np.concatenate(np.array(state_reshaped), axis = None)
 
+
         buffer.record((prev_state, action, reward, state))
+
         episodic_reward += reward
+
+        epsilon = np.log(step_max - step_index)/np.log(step_max)
+        # print(epsilon)
 
         buffer.learn()
         update_target(target_actor.variables, actor_model.variables, tau)
@@ -322,18 +443,20 @@ for ep in range(total_episodes):
             break
 
         prev_state = state
+        step_index = step_index + 1
 
     ep_reward_list.append(episodic_reward)
 
     # Mean of last 40 episodes
     avg_reward = np.mean(ep_reward_list[-40:])
     print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
-    if(avg_reward > 0.0):        
-        actor_model.save_weights("weights/door_actor.h5")
-        critic_model.save_weights("weights/door_critic.h5")
+    if(avg_reward > best_avg_reward):        
+        actor_model.save_weights("weights/best_door_actor.h5")
+        critic_model.save_weights("weights/best_door_critic.h5")
 
-        target_actor.save_weights("weights/door_target_actor.h5")
-        target_critic.save_weights("weights/door_target_critic.h5")
+        target_actor.save_weights("weights/best_door_target_actor.h5")
+        target_critic.save_weights("weights/best_door_target_critic.h5")
+        best_avg_reward = avg_reward
     avg_reward_list.append(avg_reward)
 
 # Plotting graph
