@@ -285,7 +285,7 @@ def policy(state, noise_object):
 
 #################### GLOBAL SETUP P2 ####################
 
-std_dev = 0.2
+std_dev = 0.01
 ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
 actor_model = get_actor()
@@ -316,7 +316,7 @@ buffer = Buffer(50000, 256)
 # populate buffer with demo
 demo_sample_count = 0
 
-while demo_sample_count < buffer.buffer_capacity / 4:
+while demo_sample_count < buffer.buffer_capacity:
     print("Playing back random episode... (press ESC to quit)")
 
     # # select an episode randomly
@@ -381,13 +381,16 @@ avg_reward_list = []
 
 
 #################### Training ####################
+
 best_avg_reward = 0.0
+
+epsilon = 0.99
 
 for ep in range(total_episodes):
 
-    epsilon = 0.99
-    step_index = 1
-    step_max = 5000
+
+    # step_index = 1
+    # step_max = 5000
     # avg_reward = np.mean(buffer.reward_buffer)
     prev_state = env.reset()
 
@@ -401,7 +404,7 @@ for ep in range(total_episodes):
 
     episodic_reward = 0
 
-    while step_index < step_max:
+    while True:
         # Uncomment this to see the Actor in action
         # But not in a python notebook.
         env.render()
@@ -431,7 +434,6 @@ for ep in range(total_episodes):
 
         episodic_reward += reward
 
-        epsilon = np.log(step_max - step_index)/np.log(step_max)
         # print(epsilon)
 
         buffer.learn()
@@ -443,7 +445,7 @@ for ep in range(total_episodes):
             break
 
         prev_state = state
-        step_index = step_index + 1
+        # step_index = step_index + 1
 
     ep_reward_list.append(episodic_reward)
 
@@ -458,7 +460,8 @@ for ep in range(total_episodes):
         target_critic.save_weights("weights/best_door_target_critic.h5")
         best_avg_reward = avg_reward
     avg_reward_list.append(avg_reward)
-
+    epsilon = np.exp((total_episodes - ep)/10.0)/np.exp(total_episodes/10.0)
+    print("EPSILON: ", epsilon)
 # Plotting graph
 # Episodes versus Avg. Rewards
 plt.plot(avg_reward_list)
