@@ -152,18 +152,11 @@ class Buffer:
     ):
         # Training and updating Actor & Critic networks.
         # print("REWARD_BATCH: ", reward_batch)
-
         with tf.GradientTape() as tape:
-            target_actions = target_actor(next_state_batch, training=True)
-            y = reward_batch + gamma * target_critic(
+            target_actions = actor_model(next_state_batch, training=True)
+            y = reward_batch + gamma * critic_model(
                 [next_state_batch, target_actions], training=True
             )
-            # print("TARGET_CRITIC: ", tf.math.reduce_mean(target_critic(
-            #     [next_state_batch, target_actions], training=True
-            # )))
-            print("CRITIC_VALUE: ", tf.math.reduce_mean(critic_model(
-                [next_state_batch, target_actions], training=True
-            )))
             critic_value = critic_model([state_batch, action_batch], training=True)
             critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
 
@@ -184,7 +177,7 @@ class Buffer:
             actor_loss = -tf.math.reduce_mean(critic_value)
             # actor_loss = critic_value
 
-        # print("ACTOR_LOSS: ", actor_loss)
+        print("ACTOR_LOSS: ", actor_loss)
         actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
         actor_optimizer.apply_gradients(
             zip(actor_grad, actor_model.trainable_variables)
@@ -210,9 +203,9 @@ class Buffer:
 # This update target parameters slowly
 # Based on rate `tau`, which is much less than one.
 # @tf.function
-def update_target(target_weights, weights, tau):
-    for (a, b) in zip(target_weights, weights):
-        a.assign(b * tau + a * (1 - tau))
+# def update_target(target_weights, weights, tau):
+#     for (a, b) in zip(target_weights, weights):
+#         a.assign(b * tau + a * (1 - tau))
 
 ##########*****####################*****##########
 
@@ -268,10 +261,8 @@ def policy(state, noise_object):
     if np.random.rand() < epsilon:
         sampled_actions = np.random.randn(num_actions)
         e_greedy = True
-        # print("RANDOM SAMPLED")
     else:
         sampled_actions = tf.squeeze(actor_model(state))
-        # print("ACTOR MODEL")
     # print(sampled_actions.shape)
     noise = noise_object()
     # Adding noise to action
@@ -279,7 +270,7 @@ def policy(state, noise_object):
         sampled_actions = sampled_actions + noise  
         # sampled_actions = sampled_actions 
     else:
-        sampled_actions = sampled_actions.numpy() + noise  
+        sampled_actions = sampled_actions.numpy() + noise
         # sampled_actions = sampled_actions.numpy()
 
     # print("SAMPLED_ACTIONS: ", sampled_actions)
@@ -301,86 +292,86 @@ ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.one
 actor_model = get_actor()
 critic_model = get_critic()
 
-target_actor = get_actor()
-target_critic = get_critic()
+# target_actor = get_actor()
+# target_critic = get_critic()
 
 # Making the weights equal initially
-target_actor.set_weights(actor_model.get_weights())
-target_critic.set_weights(critic_model.get_weights())
+# target_actor.set_weights(actor_model.get_weights())
+# target_critic.set_weights(critic_model.get_weights())
 
 # Learning rate for actor-critic models
 critic_lr = 0.003
 actor_lr = 0.002
 
-critic_optimizer = tf.keras.optimizers.SGD(learning_rate=critic_lr, momentum=0.05, nesterov=False, name="SGD")
-actor_optimizer = tf.keras.optimizers.SGD(learning_rate=actor_lr, momentum=0.05, nesterov=False, name="SGD")
+critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
+actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
 
 total_episodes = 3000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
-tau = 0.05
+# tau = 0.05
 
 buffer = Buffer(50000, 256)
 
 # populate buffer with demo
-# demo_sample_count = 0
+demo_sample_count = 0
 
-# while demo_sample_count < buffer.buffer_capacity/5.0:
-#     print("Playing back random episode... (press ESC to quit)")
+while demo_sample_count < buffer.buffer_capacity/5.0:
+    print("Playing back random episode... (press ESC to quit)")
 
-#     # # select an episode randomly
-#     demo_ep = random.choice(demos)
+    # # select an episode randomly
+    demo_ep = random.choice(demos)
 
-#     # read the model xml, using the metadata stored in the attribute for this episode
-#     model_xml = f["data/{}".format(demo_ep)].attrs["model_file"]
+    # read the model xml, using the metadata stored in the attribute for this episode
+    model_xml = f["data/{}".format(demo_ep)].attrs["model_file"]
 
-#     demo_env.reset()
-#     xml = postprocess_model_xml(model_xml)
-#     demo_env.reset_from_xml_string(xml)
-#     demo_env.sim.reset()
-#     # env.viewer.set_camera(0)
+    demo_env.reset()
+    xml = postprocess_model_xml(model_xml)
+    demo_env.reset_from_xml_string(xml)
+    demo_env.sim.reset()
+    # env.viewer.set_camera(0)
 
-#     # load the flattened mujoco states
-#     demo_states = f["data/{}/states".format(demo_ep)][()]
+    # load the flattened mujoco states
+    demo_states = f["data/{}/states".format(demo_ep)][()]
 
 
-#     # load the initial state
-#     demo_env.sim.set_state_from_flattened(demo_states[0])
-#     demo_prev_state = None
-#     demo_env.sim.forward()
+    # load the initial state
+    demo_env.sim.set_state_from_flattened(demo_states[0])
+    demo_prev_state = None
+    demo_env.sim.forward()
 
-#     # load the actions and play them back open-loop
-#     demo_actions = np.array(f["data/{}/actions".format(demo_ep)][()])
-#     demo_num_actions = demo_actions.shape[0]
+    # load the actions and play them back open-loop
+    demo_actions = np.array(f["data/{}/actions".format(demo_ep)][()])
+    demo_num_actions = demo_actions.shape[0]
 
-#     for j, action in enumerate(demo_actions):
-#         demo_state, demo_reward, demo_done, demo_info = demo_env.step(action)
-#         # print("DEMO ACTION, ", action)
-#         # print("DEMO REWARD, ", demo_reward)
-#         # demo_env.render()
-#         demo_state_reshaped = []
+    for j, action in enumerate(demo_actions):
+        demo_state, demo_reward, demo_done, demo_info = demo_env.step(action)
+        # print("DEMO ACTION, ", action)
+        # print("DEMO REWARD, ", demo_reward)
+        # demo_env.render()
+        demo_state_reshaped = []
 
-#         for x in obs_keys:
-#             demo_state_reshaped.append(demo_state[x])
+        for x in obs_keys:
+            demo_state_reshaped.append(demo_state[x])
 
-#         demo_state = np.concatenate(np.array(demo_state_reshaped), axis = None)
-#         # print("STATE DIM, ", num_states)
-#         if not j == 0:
-#             buffer.record((demo_prev_state, action, demo_reward, demo_state))
-#             demo_sample_count += 1
-#             print("DEMO SAMPLE LOADED: ", demo_sample_count)
+        demo_state = np.concatenate(np.array(demo_state_reshaped), axis = None)
+        # print("STATE DIM, ", num_states)
+        if not j == 0:
+            buffer.record((demo_prev_state, action, demo_reward, demo_state))
+            demo_sample_count += 1
+            print("DEMO SAMPLE LOADED: ", demo_sample_count)
 
-#         demo_prev_state = demo_state
+        demo_prev_state = demo_state
 
-#         if j < demo_num_actions - 1:
-#             # ensure that the actions deterministically lead to the same recorded states
-#             state_playback = demo_env.sim.get_state().flatten()
-#             if not np.all(np.equal(demo_states[j + 1], state_playback)):
-#                 err = np.linalg.norm(demo_states[j + 1] - state_playback)
-#                 print(f"[warning] playback diverged by {err:.2f} for ep {demo_ep} at step {j}")
+        if j < demo_num_actions - 1:
+            # ensure that the actions deterministically lead to the same recorded states
+            state_playback = demo_env.sim.get_state().flatten()
+            if not np.all(np.equal(demo_states[j + 1], state_playback)):
+                err = np.linalg.norm(demo_states[j + 1] - state_playback)
+                print(f"[warning] playback diverged by {err:.2f} for ep {demo_ep} at step {j}")
 
-# f.close()
+f.close()
 
 # To store reward history of each episode
 ep_reward_list = []
@@ -426,7 +417,7 @@ for ep in range(total_episodes):
         # print("BUFFER AVG REWARD: ", avg_reward)
         # Recieve state and reward from environment.
         state, reward, done, info = env.step(action)
-        # print("ACT/R: ", action, "/", reward)
+        
 
         # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
         # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
@@ -439,16 +430,16 @@ for ep in range(total_episodes):
 
         state = np.concatenate(np.array(state_reshaped), axis = None)
 
-        # if ep > total_episodes / 6.0:
-        buffer.record((prev_state, action, reward, state))
+        if ep > total_episodes / 6.0:
+            buffer.record((prev_state, action, reward, state))
 
         episodic_reward += reward
 
         # print(epsilon)
 
         buffer.learn()
-        update_target(target_actor.variables, actor_model.variables, tau)
-        update_target(target_critic.variables, critic_model.variables, tau)
+        # update_target(target_actor.variables, actor_model.variables, tau)
+        # update_target(target_critic.variables, critic_model.variables, tau)
 
         # End this episode when `done` is True
         if done:
@@ -466,8 +457,8 @@ for ep in range(total_episodes):
         actor_model.save_weights("weights/best_door_actor.h5")
         critic_model.save_weights("weights/best_door_critic.h5")
 
-        target_actor.save_weights("weights/best_door_target_actor.h5")
-        target_critic.save_weights("weights/best_door_target_critic.h5")
+        # target_actor.save_weights("weights/best_door_target_actor.h5")
+        # target_critic.save_weights("weights/best_door_target_critic.h5")
         best_avg_reward = avg_reward
     avg_reward_list.append(avg_reward)
     epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
@@ -484,5 +475,5 @@ plt.show()
 actor_model.save_weights("weights/custom_actor_final.h5")
 critic_model.save_weights("weights/custom_critic_final.h5")
 
-target_actor.save_weights("weights/custom_target_actor_final.h5")
-target_critic.save_weights("weights/custom_target_critic_final.h5")
+# target_actor.save_weights("weights/custom_target_actor_final.h5")
+# target_critic.save_weights("weights/custom_target_critic_final.h5")
