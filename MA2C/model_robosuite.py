@@ -315,13 +315,13 @@ actor_lr = 0.002
 critic_optimizer = tf.keras.optimizers.SGD(learning_rate=critic_lr, momentum=0.05, nesterov=False, name="SGD")
 actor_optimizer = tf.keras.optimizers.SGD(learning_rate=actor_lr, momentum=0.05, nesterov=False, name="SGD")
 
-total_episodes = 3000
+total_episodes = 30000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
 tau = 0.05
 
-buffer = Buffer(50000, 256)
+buffer = Buffer(100000, 256)
 
 # populate buffer with demo
 # demo_sample_count = 0
@@ -470,7 +470,7 @@ for ep in range(total_episodes):
         target_critic.save_weights("weights/best_door_target_critic.h5")
         best_avg_reward = avg_reward
     avg_reward_list.append(avg_reward)
-    epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
+    epsilon = np.exp((total_episodes - ep)/10000.0)/np.exp(total_episodes/10000.0)
     print("EPSILON: ", epsilon)
 # Plotting graph
 # Episodes versus Avg. Rewards
