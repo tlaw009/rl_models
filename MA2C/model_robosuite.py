@@ -15,27 +15,27 @@ import random
 
 # demo env setup
 
-demo_path = "/home/tony/rl_demo/1653334277_0912106"
+# demo_path = "/home/tony/rl_demo/1653334277_0912106"
 
-hdf5_path = os.path.join(demo_path, "demo.hdf5")
+# hdf5_path = os.path.join(demo_path, "demo.hdf5")
 
-f = h5py.File(hdf5_path, "r")
+# f = h5py.File(hdf5_path, "r")
 
-env_name = f["data"].attrs["env"]
+# env_name = f["data"].attrs["env"]
 
-env_info = json.loads(f["data"].attrs["env_info"])
+# env_info = json.loads(f["data"].attrs["env_info"])
 
-demo_env = suite.make(
-    **env_info,
-    has_renderer=False,
-    has_offscreen_renderer=False,
-    ignore_done=True,
-    use_camera_obs=False,
-    reward_shaping=True,
-    control_freq=20,
-)
+# demo_env = suite.make(
+#     **env_info,
+#     has_renderer=False,
+#     has_offscreen_renderer=False,
+#     ignore_done=True,
+#     use_camera_obs=False,
+#     reward_shaping=True,
+#     control_freq=20,
+# )
 
-demos = list(f["data"].keys())
+# demos = list(f["data"].keys())
 
 # real env setup
 
@@ -161,14 +161,14 @@ class Buffer:
             # print("TARGET_CRITIC: ", tf.math.reduce_mean(target_critic(
             #     [next_state_batch, target_actions], training=True
             # )))
-            print("CRITIC_VALUE: ", tf.math.reduce_mean(critic_model(
-                [next_state_batch, target_actions], training=True
-            )))
+            # print("CRITIC_VALUE: ", tf.math.reduce_mean(critic_model(
+            #     [next_state_batch, target_actions], training=True
+            # )))
             critic_value = critic_model([state_batch, action_batch], training=True)
             critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
 
         # print("CRITIC_VALUE: ", critic_value)
-        print("CRITIC_LOSS: ", critic_loss)
+        # print("CRITIC_LOSS: ", critic_loss)
         critic_grad = tape.gradient(critic_loss, critic_model.trainable_variables)
         # print("CRITIC_GRADIENT: ", critic_grad)
         critic_optimizer.apply_gradients(
@@ -315,7 +315,7 @@ actor_lr = 0.002
 critic_optimizer = tf.keras.optimizers.SGD(learning_rate=critic_lr, momentum=0.05, nesterov=False, name="SGD")
 actor_optimizer = tf.keras.optimizers.SGD(learning_rate=actor_lr, momentum=0.05, nesterov=False, name="SGD")
 
-total_episodes = 30000
+total_episodes = 4000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
@@ -383,6 +383,8 @@ buffer = Buffer(100000, 256)
 # f.close()
 
 # To store reward history of each episode
+eval_ep_reward_list = []
+eval_avg_reward_list = []
 ep_reward_list = []
 # To store average reward history of last few episodes
 avg_reward_list = []
@@ -395,90 +397,161 @@ avg_reward_list = []
 best_avg_reward = 0.0
 
 epsilon = 0.99
+eval_flag = False
+ep = 0
+while ep < total_episodes:
 
-for ep in range(total_episodes):
+    if eval_flag:
+        prev_state = env.reset()
+        prev_state_reshaped = []
+
+        for x in obs_keys:
+            prev_state_reshaped.append(prev_state[x])
+
+        prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
+
+        eval_episodic_reward = 0
+
+        while True:
+            # Uncomment this to see the Actor in action
+            # But not in a python notebook.
+            env.render()
+
+            tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
+
+            sampled_actions = np.squeeze(tf.squeeze(actor_model(tf_prev_state)))
+            # print("ACTION: ", action)
+            # print("BUFFER AVG REWARD: ", avg_reward)
+            # Recieve state and reward from environment.
+            state, reward, done, info = env.step(sampled_actions)
+
+            eval_episodic_reward += reward
+            # print("ACT/R: ", action, "/", reward)
+
+            # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
+            # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
+
+            # print(reward)
+            state_reshaped = []
+
+            for x in obs_keys:
+                state_reshaped.append(state[x])
+
+            state = np.concatenate(np.array(state_reshaped), axis = None)
+
+            # if ep > total_episodes / 6.0:
+            # buffer.record((prev_state, action, reward, state))
+
+            # episodic_reward += reward
+
+            # print(epsilon)
+
+            # buffer.learn()
+            # update_target(target_actor.variables, actor_model.variables, tau)
+            # update_target(target_critic.variables, critic_model.variables, tau)
+
+            # End this episode when `done` is True
+            if done:
+                break
+
+            prev_state = state
+            # step_index = step_index + 1
 
 
+        # print("TOTAL REWARD: ", eval_episodic_reward)
+        eval_ep_reward_list.append(eval_episodic_reward)
+        eval_avg_reward = np.mean(eval_ep_reward_list[-40:])
+        eval_avg_reward_list.append(eval_avg_reward)
+
+        print("Episode * {} * Avg eval Reward is ==> {}".format(ep, eval_avg_reward))
+        ep = ep + 1
+        eval_flag = False
+
+    else:
     # step_index = 1
     # step_max = 5000
     # avg_reward = np.mean(buffer.reward_buffer)
-    prev_state = env.reset()
+        prev_state = env.reset()
 
-    # prev_dist_to_goal = np.linalg.norm(prev_state['gripper_to_cube_pos'])
+        # prev_dist_to_goal = np.linalg.norm(prev_state['gripper_to_cube_pos'])
 
-    prev_state_reshaped = []
-    for x in obs_keys:
-        prev_state_reshaped.append(prev_state[x])
-
-    prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
-
-    episodic_reward = 0
-
-    while True:
-        # Uncomment this to see the Actor in action
-        # But not in a python notebook.
-        env.render()
-
-        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
-
-        action = policy(tf_prev_state, ou_noise)[0]
-        # print("ACTION: ", action)
-        # print("BUFFER AVG REWARD: ", avg_reward)
-        # Recieve state and reward from environment.
-        state, reward, done, info = env.step(action)
-        # print("ACT/R: ", action, "/", reward)
-
-        # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
-        # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
-
-        # print(reward)
-        state_reshaped = []
-
+        prev_state_reshaped = []
         for x in obs_keys:
-            state_reshaped.append(state[x])
+            prev_state_reshaped.append(prev_state[x])
 
-        state = np.concatenate(np.array(state_reshaped), axis = None)
+        prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
 
-        # if ep > total_episodes / 6.0:
-        buffer.record((prev_state, action, reward, state))
+        episodic_reward = 0
 
-        episodic_reward += reward
+        while True:
+            # Uncomment this to see the Actor in action
+            # But not in a python notebook.
+            env.render()
 
-        # print(epsilon)
+            tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
-        buffer.learn()
-        update_target(target_actor.variables, actor_model.variables, tau)
-        update_target(target_critic.variables, critic_model.variables, tau)
+            action = policy(tf_prev_state, ou_noise)[0]
+            # print("ACTION: ", action)
+            # print("BUFFER AVG REWARD: ", avg_reward)
+            # Recieve state and reward from environment.
+            state, reward, done, info = env.step(action)
+            # print("ACT/R: ", action, "/", reward)
 
-        # End this episode when `done` is True
-        if done:
-            break
+            # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
+            # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
 
-        prev_state = state
-        # step_index = step_index + 1
+            # print(reward)
+            state_reshaped = []
 
-    ep_reward_list.append(episodic_reward)
+            for x in obs_keys:
+                state_reshaped.append(state[x])
 
-    # Mean of last 40 episodes
-    avg_reward = np.mean(ep_reward_list[-40:])
-    print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
-    if(avg_reward > best_avg_reward):        
-        actor_model.save_weights("weights/best_door_actor.h5")
-        critic_model.save_weights("weights/best_door_critic.h5")
+            state = np.concatenate(np.array(state_reshaped), axis = None)
 
-        target_actor.save_weights("weights/best_door_target_actor.h5")
-        target_critic.save_weights("weights/best_door_target_critic.h5")
-        best_avg_reward = avg_reward
-    avg_reward_list.append(avg_reward)
-    epsilon = np.exp((total_episodes - ep)/10000.0)/np.exp(total_episodes/10000.0)
-    print("EPSILON: ", epsilon)
+            # if ep > total_episodes / 6.0:
+            buffer.record((prev_state, action, reward, state))
+
+            episodic_reward += reward
+
+            # print(epsilon)
+
+            buffer.learn()
+            update_target(target_actor.variables, actor_model.variables, tau)
+            update_target(target_critic.variables, critic_model.variables, tau)
+
+            # End this episode when `done` is True
+            if done:
+                break
+
+            prev_state = state
+            # step_index = step_index + 1
+
+        ep_reward_list.append(episodic_reward)
+
+        # Mean of last 40 episodes
+        avg_reward = np.mean(ep_reward_list[-40:])
+        print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
+        if(avg_reward > best_avg_reward):        
+            actor_model.save_weights("weights/best_actor.h5")
+            critic_model.save_weights("weights/best_critic.h5")
+
+            target_actor.save_weights("weights/best_target_actor.h5")
+            target_critic.save_weights("weights/best_target_critic.h5")
+            best_avg_reward = avg_reward
+        avg_reward_list.append(avg_reward)
+        epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
+        print("EPSILON: ", epsilon)
+        eval_flag = True
 # Plotting graph
 # Episodes versus Avg. Rewards
 plt.plot(avg_reward_list)
 plt.xlabel("Episode")
-plt.ylabel("Avg. Epsiodic Reward")
+plt.ylabel("Avg. Epsiodic Reward, train")
 plt.show()
-
+plt.plot(eval_avg_reward_list)
+plt.xlabel("Episode")
+plt.ylabel("Avg. Epsiodic Reward, eval")
+plt.show()
 ##########*****####################*****##########
 
 actor_model.save_weights("weights/custom_actor_final.h5")
