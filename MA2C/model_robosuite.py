@@ -315,7 +315,7 @@ actor_lr = 0.002
 critic_optimizer = tf.keras.optimizers.SGD(learning_rate=critic_lr, momentum=0.05, nesterov=False, name="SGD")
 actor_optimizer = tf.keras.optimizers.SGD(learning_rate=actor_lr, momentum=0.05, nesterov=False, name="SGD")
 
-total_episodes = 4000
+total_episodes = 6000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
