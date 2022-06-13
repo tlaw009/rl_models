@@ -396,7 +396,7 @@ avg_reward_list = []
 
 best_avg_reward = 0.0
 
-epsilon = 0.99
+epsilon = -0.01
 eval_flag = False
 ep = 0
 while ep < total_episodes:
@@ -539,8 +539,8 @@ while ep < total_episodes:
             target_critic.save_weights("weights/best_target_critic.h5")
             best_avg_reward = avg_reward
         avg_reward_list.append(avg_reward)
-        epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
-        print("EPSILON: ", epsilon)
+        # epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
+        # print("EPSILON: ", epsilon)
         eval_flag = True
 # Plotting graph
 # Episodes versus Avg. Rewards
