@@ -69,15 +69,15 @@ state_dim = np.sum(obs_dim, dtype=np.int32)
 
 
 num_states = state_dim.item()
-print("Size of State Space ->  {}".format(num_states))
+print("Size of State Space ->  {}".format(num_states), flush=True)
 num_actions = env.action_dim
-print("Size of Action Space ->  {}".format(num_actions))
+print("Size of Action Space ->  {}".format(num_actions), flush=True)
 
 upper_bound = env.action_spec[1][0]
 lower_bound = env.action_spec[0][0]
 
-print("Max Value of Action ->  {}".format(upper_bound))
-print("Min Value of Action ->  {}".format(lower_bound))
+print("Max Value of Action ->  {}".format(upper_bound), flush=True)
+print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
 
 ##########*****####################*****##########
@@ -463,7 +463,7 @@ while ep < total_episodes:
         eval_avg_reward = np.mean(eval_ep_reward_list[-40:])
         eval_avg_reward_list.append(eval_avg_reward)
 
-        print("Episode * {} * Avg eval Reward is ==> {}".format(ep, eval_avg_reward))
+        print("Episode * {} * Avg eval Reward is ==> {}".format(ep, eval_avg_reward), flush=True)
         ep = ep + 1
         eval_flag = False
 
@@ -530,7 +530,7 @@ while ep < total_episodes:
 
         # Mean of last 40 episodes
         avg_reward = np.mean(ep_reward_list[-40:])
-        print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
+        print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward), flush=True)
         if(avg_reward > best_avg_reward):        
             actor_model.save_weights("weights/best_actor.h5")
             critic_model.save_weights("weights/best_critic.h5")
@@ -540,7 +540,7 @@ while ep < total_episodes:
             best_avg_reward = avg_reward
         avg_reward_list.append(avg_reward)
         epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
-        print("EPSILON: ", epsilon)
+        print("EPSILON: ", epsilon, flush=True)
         eval_flag = True
 # Plotting graph
 # Episodes versus Avg. Rewards
