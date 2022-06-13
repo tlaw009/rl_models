@@ -1,6 +1,7 @@
 import gym
 import tensorflow as tf
 from tensorflow.keras import layers
+from tensorflow.keras import Model
 import numpy as np
 import matplotlib.pyplot as plt
 import robosuite as suite
@@ -10,9 +11,9 @@ from robosuite.utils.mjcf_utils import postprocess_model_xml
 import os
 import json
 import random
+import tensorflow_probability as tfp
 
-
-
+tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
 
 
@@ -58,7 +59,7 @@ env = suite.make(
     env_name="Lift", # try with other tasks like "Stack" and "Door"
     robots="Panda",  # try with other robots like "Sawyer" and "Jaco"
     controller_configs=config,
-    has_renderer=True,
+    has_renderer=False,
     ignore_done=False,
     has_offscreen_renderer=False,
     reward_shaping=True,
@@ -168,8 +169,8 @@ class Buffer:
             pi_a, log_pi_a = actor_model(next_state_batch)
 
             # Get Q value estimates from target Q network
-            q1_target = target_critic_1(next_state_batch, pi_a, training = True)
-            q2_target = target_critic_2(next_state_batch, pi_a, training = True)
+            q1_target = target_critic_1([next_state_batch, pi_a], training = True)
+            q2_target = target_critic_2([next_state_batch, pi_a], training = True)
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
@@ -177,20 +178,20 @@ class Buffer:
 
             # Add the entropy term to get soft Q target
             soft_q_target = min_q_target - alpha * log_pi_a
-            y = tf.stop_gradient(rewards + gamma * done_batch * soft_q_target)
+            y = tf.stop_gradient(reward_batch + gamma * done_batch * soft_q_target)
 
             critic1_loss = tf.reduce_mean((q1 - y)**2)
 
         with tf.GradientTape() as tape2:
             # Get Q value estimates, action used here is from the replay buffer
-            q2 = critic_model_2(state_batch, action_batch, training = True)
+            q2 = critic_model_2([state_batch, action_batch], training = True)
 
             # Sample actions from the policy for next states
             pi_a, log_pi_a = actor_model(next_state_batch)
 
             # Get Q value estimates from target Q network
-            q1_target = target_critic_1(next_state_batch, pi_a, training = True)
-            q2_target = target_critic_2(next_state_batch, pi_a, training = True)
+            q1_target = target_critic_1([next_state_batch, pi_a], training = True)
+            q2_target = target_critic_2([next_state_batch, pi_a], training = True)
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
@@ -198,26 +199,26 @@ class Buffer:
 
             # Add the entropy term to get soft Q target
             soft_q_target = min_q_target - alpha * log_pi_a
-            y = tf.stop_gradient(rewards + gamma * done_batch * soft_q_target)
+            y = tf.stop_gradient(reward_batch + gamma * done_batch * soft_q_target)
 
             critic2_loss = tf.reduce_mean((q2 - y)**2)
 
         grads1 = tape1.gradient(critic1_loss, critic_model_1.trainable_variables)
-        self.critic1_optimizer.apply_gradients(zip(grads1,
+        critic1_optimizer.apply_gradients(zip(grads1,
                                                    critic_model_1.trainable_variables))
 
         grads2 = tape2.gradient(critic2_loss, critic_model_2.trainable_variables)
-        self.critic2_optimizer.apply_gradients(zip(grads2,
+        critic2_optimizer.apply_gradients(zip(grads2,
                                                    critic_model_2.trainable_variables))
 
 
         with tf.GradientTape() as tape3:
             # Sample actions from the policy for current states
-            pi_a, log_pi_a = actor_model(current_states)
+            pi_a, log_pi_a = actor_model(state_batch)
 
             # Get Q value estimates from target Q network
-            q1 = critic_model_1(state_batch, pi_a)
-            q2 = critic_model_2(state_batch, pi_a)
+            q1 = critic_model_1([state_batch, pi_a], training = True)
+            q2 = critic_model_2([state_batch, pi_a], training = True)
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
@@ -239,7 +240,7 @@ class Buffer:
                                                        target_entropy))
 
         variables = [alpha]
-        grads = tape.gradient(alpha_loss, variables)
+        grads = tape4.gradient(alpha_loss, variables)
         alpha_optimizer.apply_gradients(zip(grads, variables))
 
     # We compute the loss and update parameters
@@ -253,7 +254,7 @@ class Buffer:
         state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
         action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
         reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
-        reward_batch = tf.cast(reward_batch, dtype=tf.float32)
+        reward_batch = tf.cast(reward_batch, dtype=tf.float64)
         next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
         done_batch = tf.convert_to_tensor(self.done_buffer[batch_indices])
 
@@ -263,7 +264,7 @@ class Buffer:
 # This update target parameters slowly
 # Based on rate `tau`, which is much less than one.
 # @tf.function
-def update_target(target_weights, weights, tau):
+def update_target():
         for theta_target, theta in zip(target_critic_1.trainable_variables,
                                        critic_model_1.trainable_variables):
             theta_target = tau * theta_target + (1 - tau) * theta
@@ -299,9 +300,10 @@ class Actor(Model):
         # Use re-parameterization trick to deterministically sample action from
         # the policy network. First, sample from a Normal distribution of
         # sample size as the action and multiply it with stdev
+        # print("MU SIG: ", mu, sigma)
         dist = tfp.distributions.Normal(mu, sigma)
         action_ = dist.sample()
-
+        # print("PRETANH ACT: ", action_)
         # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
         action = tf.tanh(action_)
 
@@ -309,9 +311,9 @@ class Actor(Model):
         log_pi_ = dist.log_prob(action_)
         # Change log probability to account for tanh squashing as mentioned in
         # Appendix C of the paper
-        log_pi = log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1,
+        log_pi = log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2), axis=1,
                                          keepdims=True)
-
+        # print("ACTION: ", action)
         return action, log_pi
 
     @property
@@ -341,7 +343,7 @@ def get_critic():
 
     out = layers.Dense(64, activation="tanh")(concat)
     out = layers.Dense(64, activation="tanh")(out)
-    outputs = layers.Dense(1)(out)
+    outputs = layers.Dense(1, dtype='float64')(out)
 
     # Outputs single value for give state-action
     model = tf.keras.Model([state_input, action_input], outputs)
@@ -383,8 +385,8 @@ def get_critic():
 
 #################### GLOBAL SETUP P2 ####################
 
-std_dev = 0.01
-ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
+# std_dev = 0.01
+# ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
 actor_model = Actor()
 critic_model_1 = get_critic()
@@ -402,11 +404,11 @@ target_critic_2.set_weights(critic_model_2.get_weights())
 
 # Learning rate for actor-critic models
 
-lr = 0.003
+lr = 0.0015
 
 alpha_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
-critic_optimizer_1 = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
-critic_optimizer_2 = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+critic1_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 
 total_episodes = 6000
@@ -488,7 +490,7 @@ avg_reward_list = []
 
 #################### Training ####################
 
-best_avg_reward = 0.0
+# best_avg_reward = 0.0
 
 epsilon = 0.99
 eval_flag = False
@@ -509,11 +511,12 @@ while ep < total_episodes:
         while True:
             # Uncomment this to see the Actor in action
             # But not in a python notebook.
-            env.render()
+            # env.render()
 
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
-            sampled_actions = np.squeeze(tf.squeeze(actor_model(tf_prev_state)))
+            sampled_actions, log_a= actor_model(tf_prev_state)
+            sampled_actions =  sampled_actions[0]
             # print("ACTION: ", action)
             # print("BUFFER AVG REWARD: ", avg_reward)
             # Recieve state and reward from environment.
@@ -580,11 +583,13 @@ while ep < total_episodes:
         while True:
             # Uncomment this to see the Actor in action
             # But not in a python notebook.
-            env.render()
+            # env.render()
 
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
-            action = policy(tf_prev_state, ou_noise)[0]
+            action, log_a = actor_model(tf_prev_state)
+            # print("ACTION: ", action)
+            action = action[0]
             # print("ACTION: ", action)
             # print("BUFFER AVG REWARD: ", avg_reward)
             # Recieve state and reward from environment.
@@ -615,8 +620,8 @@ while ep < total_episodes:
             # print(epsilon)
 
             buffer.learn()
-            update_target(target_actor.variables, actor_model.variables, tau)
-            update_target(target_critic.variables, critic_model.variables, tau)
+            update_target()
+            # update_target(target_critic.variables, critic_model.variables, tau)
 
             # End this episode when `done` is True
             if done:
@@ -630,13 +635,13 @@ while ep < total_episodes:
         # Mean of last 40 episodes
         avg_reward = np.mean(ep_reward_list[-40:])
         print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
-        if(avg_reward > best_avg_reward):        
-            actor_model.save_weights("weights/best_actor.h5")
-            critic_model.save_weights("weights/best_critic.h5")
+        # if(avg_reward > best_avg_reward):        
+        #     actor_model.save_weights("weights/best_actor.h5")
+        #     critic_model.save_weights("weights/best_critic.h5")
 
-            target_actor.save_weights("weights/best_target_actor.h5")
-            target_critic.save_weights("weights/best_target_critic.h5")
-            best_avg_reward = avg_reward
+        #     target_actor.save_weights("weights/best_target_actor.h5")
+        #     target_critic.save_weights("weights/best_target_critic.h5")
+        #     best_avg_reward = avg_reward
         avg_reward_list.append(avg_reward)
         epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
         print("EPSILON: ", epsilon)
@@ -653,8 +658,8 @@ plt.ylabel("Avg. Epsiodic Reward, eval")
 plt.show()
 ##########*****####################*****##########
 
-actor_model.save_weights("weights/custom_actor_final.h5")
-critic_model.save_weights("weights/custom_critic_final.h5")
+# actor_model.save_weights("weights/custom_actor_final.h5")
+# critic_model.save_weights("weights/custom_critic_final.h5")
 
-target_actor.save_weights("weights/custom_target_actor_final.h5")
-target_critic.save_weights("weights/custom_target_critic_final.h5")
+# target_actor.save_weights("weights/custom_target_actor_final.h5")
+# target_critic.save_weights("weights/custom_target_critic_final.h5")
