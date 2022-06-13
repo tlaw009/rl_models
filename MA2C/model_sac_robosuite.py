@@ -11,6 +11,11 @@ import os
 import json
 import random
 
+
+
+# ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
+
+
 ################## GLOBAL SETUP P1 ##################
 
 # demo env setup
@@ -84,32 +89,32 @@ print("Min Value of Action ->  {}".format(lower_bound))
 
 #################### Auxiliaries ####################
 
-class OUActionNoise:
-    def __init__(self, mean, std_deviation, theta=0.15, dt=1e-2, x_initial=None):
-        self.theta = theta
-        self.mean = mean
-        self.std_dev = std_deviation
-        self.dt = dt
-        self.x_initial = x_initial
-        self.reset()
+# class OUActionNoise:
+#     def __init__(self, mean, std_deviation, theta=0.15, dt=1e-2, x_initial=None):
+#         self.theta = theta
+#         self.mean = mean
+#         self.std_dev = std_deviation
+#         self.dt = dt
+#         self.x_initial = x_initial
+#         self.reset()
 
-    def __call__(self):
-        # Formula taken from https://www.wikipedia.org/wiki/Ornstein-Uhlenbeck_process.
-        x = (
-            self.x_prev
-            + self.theta * (self.mean - self.x_prev) * self.dt
-            + self.std_dev * np.sqrt(self.dt) * np.random.normal(size=self.mean.shape)
-        )
-        # Store x into x_prev
-        # Makes next noise dependent on current one
-        self.x_prev = x
-        return x
+#     def __call__(self):
+#         # Formula taken from https://www.wikipedia.org/wiki/Ornstein-Uhlenbeck_process.
+#         x = (
+#             self.x_prev
+#             + self.theta * (self.mean - self.x_prev) * self.dt
+#             + self.std_dev * np.sqrt(self.dt) * np.random.normal(size=self.mean.shape)
+#         )
+#         # Store x into x_prev
+#         # Makes next noise dependent on current one
+#         self.x_prev = x
+#         return x
 
-    def reset(self):
-        if self.x_initial is not None:
-            self.x_prev = self.x_initial
-        else:
-            self.x_prev = np.zeros_like(self.mean)
+#     def reset(self):
+#         if self.x_initial is not None:
+#             self.x_prev = self.x_initial
+#         else:
+#             self.x_prev = np.zeros_like(self.mean)
 
 ##########*****####################*****##########
 
@@ -132,6 +137,7 @@ class Buffer:
         self.action_buffer = np.zeros((self.buffer_capacity, num_actions))
         self.reward_buffer = np.zeros((self.buffer_capacity, 1))
         self.next_state_buffer = np.zeros((self.buffer_capacity, num_states))
+        self.done_buffer = np.zeros((self.buffer_capacity, 1))
 
     # Takes (s,a,r,s') obervation tuple as input
     def record(self, obs_tuple):
@@ -143,52 +149,98 @@ class Buffer:
         self.action_buffer[index] = obs_tuple[1]
         self.reward_buffer[index] = obs_tuple[2]
         self.next_state_buffer[index] = obs_tuple[3]
-
+        self.done_buffer[index] = obs_tuple[4]
         self.buffer_counter += 1
 
     # @tf.function
     def update(
-        self, state_batch, action_batch, reward_batch, next_state_batch,
+        self, state_batch, action_batch, reward_batch, next_state_batch, done_batch
     ):
+
         # Training and updating Actor & Critic networks.
         # print("REWARD_BATCH: ", reward_batch)
 
-        with tf.GradientTape() as tape:
-            target_actions = target_actor(next_state_batch, training=True)
-            y = reward_batch + gamma * target_critic(
-                [next_state_batch, target_actions], training=True
-            )
-            # print("TARGET_CRITIC: ", tf.math.reduce_mean(target_critic(
-            #     [next_state_batch, target_actions], training=True
-            # )))
-            # print("CRITIC_VALUE: ", tf.math.reduce_mean(critic_model(
-            #     [next_state_batch, target_actions], training=True
-            # )))
-            critic_value = critic_model([state_batch, action_batch], training=True)
-            critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
+        with tf.GradientTape() as tape1:
+            # Get Q value estimates, action used here is from the replay buffer
+            q1 = critic_model_1([state_batch, action_batch], training = True)
 
-        # print("CRITIC_VALUE: ", critic_value)
-        # print("CRITIC_LOSS: ", critic_loss)
-        critic_grad = tape.gradient(critic_loss, critic_model.trainable_variables)
-        # print("CRITIC_GRADIENT: ", critic_grad)
-        critic_optimizer.apply_gradients(
-            zip(critic_grad, critic_model.trainable_variables)
-        )
+            # Sample actions from the policy for next states
+            pi_a, log_pi_a = actor_model(next_state_batch)
 
-        with tf.GradientTape() as tape:
-            actions = actor_model(state_batch, training=True)
-            critic_value = critic_model([state_batch, actions], training=True)
-            # critic_value = reward_batch
-            # Used `-value` as we want to maximize the value given
-            # by the critic for our actions
-            actor_loss = -tf.math.reduce_mean(critic_value)
-            # actor_loss = critic_value
+            # Get Q value estimates from target Q network
+            q1_target = target_critic_1(next_state_batch, pi_a, training = True)
+            q2_target = target_critic_2(next_state_batch, pi_a, training = True)
 
-        # print("ACTOR_LOSS: ", actor_loss)
-        actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
-        actor_optimizer.apply_gradients(
-            zip(actor_grad, actor_model.trainable_variables)
-        )
+            # Apply the clipped double Q trick
+            # Get the minimum Q value of the 2 target networks
+            min_q_target = tf.minimum(q1_target, q2_target)
+
+            # Add the entropy term to get soft Q target
+            soft_q_target = min_q_target - alpha * log_pi_a
+            y = tf.stop_gradient(rewards + gamma * done_batch * soft_q_target)
+
+            critic1_loss = tf.reduce_mean((q1 - y)**2)
+
+        with tf.GradientTape() as tape2:
+            # Get Q value estimates, action used here is from the replay buffer
+            q2 = critic_model_2(state_batch, action_batch, training = True)
+
+            # Sample actions from the policy for next states
+            pi_a, log_pi_a = actor_model(next_state_batch)
+
+            # Get Q value estimates from target Q network
+            q1_target = target_critic_1(next_state_batch, pi_a, training = True)
+            q2_target = target_critic_2(next_state_batch, pi_a, training = True)
+
+            # Apply the clipped double Q trick
+            # Get the minimum Q value of the 2 target networks
+            min_q_target = tf.minimum(q1_target, q2_target)
+
+            # Add the entropy term to get soft Q target
+            soft_q_target = min_q_target - alpha * log_pi_a
+            y = tf.stop_gradient(rewards + gamma * done_batch * soft_q_target)
+
+            critic2_loss = tf.reduce_mean((q2 - y)**2)
+
+        grads1 = tape1.gradient(critic1_loss, critic_model_1.trainable_variables)
+        self.critic1_optimizer.apply_gradients(zip(grads1,
+                                                   critic_model_1.trainable_variables))
+
+        grads2 = tape2.gradient(critic2_loss, critic_model_2.trainable_variables)
+        self.critic2_optimizer.apply_gradients(zip(grads2,
+                                                   critic_model_2.trainable_variables))
+
+
+        with tf.GradientTape() as tape3:
+            # Sample actions from the policy for current states
+            pi_a, log_pi_a = actor_model(current_states)
+
+            # Get Q value estimates from target Q network
+            q1 = critic_model_1(state_batch, pi_a)
+            q2 = critic_model_2(state_batch, pi_a)
+
+            # Apply the clipped double Q trick
+            # Get the minimum Q value of the 2 target networks
+            min_q = tf.minimum(q1, q2)
+
+            soft_q = min_q - alpha * log_pi_a
+
+            actor_loss = -tf.reduce_mean(soft_q)
+
+        variables = actor_model.trainable_variables
+        grads = tape3.gradient(actor_loss, variables)
+        actor_optimizer.apply_gradients(zip(grads, variables))
+
+        with tf.GradientTape() as tape4:
+            # Sample actions from the policy for current states
+            pi_a, log_pi_a = actor_model(state_batch)
+
+            alpha_loss = tf.reduce_mean( -alpha*(log_pi_a +
+                                                       target_entropy))
+
+        variables = [alpha]
+        grads = tape.gradient(alpha_loss, variables)
+        alpha_optimizer.apply_gradients(zip(grads, variables))
 
     # We compute the loss and update parameters
     def learn(self):
@@ -203,35 +255,71 @@ class Buffer:
         reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
         reward_batch = tf.cast(reward_batch, dtype=tf.float32)
         next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
+        done_batch = tf.convert_to_tensor(self.done_buffer[batch_indices])
 
-        self.update(state_batch, action_batch, reward_batch, next_state_batch)
+        self.update(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
 
 
 # This update target parameters slowly
 # Based on rate `tau`, which is much less than one.
 # @tf.function
 def update_target(target_weights, weights, tau):
-    for (a, b) in zip(target_weights, weights):
-        a.assign(b * tau + a * (1 - tau))
+        for theta_target, theta in zip(target_critic_1.trainable_variables,
+                                       critic_model_1.trainable_variables):
+            theta_target = tau * theta_target + (1 - tau) * theta
 
+        for theta_target, theta in zip(target_critic_2.trainable_variables,
+                                       critic_model_2.trainable_variables):
+            theta_target = tau * theta_target + (1 - tau) * theta
 ##########*****####################*****##########
 
 #################### Models ####################
 
-def get_actor():
-    # Initialize weights between -3e-3 and 3-e3
-    last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
+class Actor(Model):
 
-    inputs = layers.Input(shape=(num_states,))
-    # out = layers.Flatten()(inputs)
-    out = layers.Dense(64, activation="tanh")(inputs)
-    out = layers.Dense(64, activation="tanh")(out)
-    outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
+    def __init__(self):
+        super().__init__()
+        self.action_dim = num_actions
+        self.dense1_layer = layers.Dense(64, activation="tanh")
+        self.dense2_layer = layers.Dense(64, activation="tanh")
+        self.mean_layer = layers.Dense(self.action_dim)
+        self.stdev_layer = layers.Dense(self.action_dim)
 
-    # Our upper bound is 2.0 for Pendulum.
-    outputs = outputs * upper_bound
-    model = tf.keras.Model(inputs, outputs)
-    return model
+    def call(self, state):
+        # Get mean and standard deviation from the policy network
+        a1 = self.dense1_layer(state)
+        a2 = self.dense2_layer(a1)
+        mu = self.mean_layer(a2)
+
+        # Standard deviation is bounded by a constraint of being non-negative
+        # therefore we produce log stdev as output which can be [-inf, inf]
+        log_sigma = self.stdev_layer(a2)
+        sigma = tf.exp(log_sigma)
+
+        # Use re-parameterization trick to deterministically sample action from
+        # the policy network. First, sample from a Normal distribution of
+        # sample size as the action and multiply it with stdev
+        dist = tfp.distributions.Normal(mu, sigma)
+        action_ = dist.sample()
+
+        # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
+        action = tf.tanh(action_)
+
+        # Calculate the log probability
+        log_pi_ = dist.log_prob(action_)
+        # Change log probability to account for tanh squashing as mentioned in
+        # Appendix C of the paper
+        log_pi = log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1,
+                                         keepdims=True)
+
+        return action, log_pi
+
+    @property
+    def trainable_variables(self):
+        return self.dense1_layer.trainable_variables + \
+                self.dense1_layer.trainable_variables + \
+                self.mean_layer.trainable_variables + \
+                self.stdev_layer.trainable_variables
 
 ##################################
 #Modified for TD advantage critic#
@@ -262,34 +350,34 @@ def get_critic():
 
 
 
-def policy(state, noise_object):
-    # print(state.shape)
-    e_greedy = False
-    if np.random.rand() < epsilon:
-        sampled_actions = np.random.randn(num_actions)
-        e_greedy = True
-        # print("RANDOM SAMPLED")
-    else:
-        sampled_actions = tf.squeeze(actor_model(state))
-        # print("ACTOR MODEL")
-    # print(sampled_actions.shape)
-    noise = noise_object()
-    # Adding noise to action
-    if e_greedy:
-        sampled_actions = sampled_actions + noise  
-        # sampled_actions = sampled_actions 
-    else:
-        sampled_actions = sampled_actions.numpy() + noise  
-        # sampled_actions = sampled_actions.numpy()
+# def policy(state, noise_object):
+#     # print(state.shape)
+#     e_greedy = False
+#     if np.random.rand() < epsilon:
+#         sampled_actions = np.random.randn(num_actions)
+#         e_greedy = True
+#         # print("RANDOM SAMPLED")
+#     else:
+#         sampled_actions = tf.squeeze(actor_model(state))
+#         # print("ACTOR MODEL")
+#     # print(sampled_actions.shape)
+#     noise = noise_object()
+#     # Adding noise to action
+#     if e_greedy:
+#         sampled_actions = sampled_actions + noise  
+#         # sampled_actions = sampled_actions 
+#     else:
+#         sampled_actions = sampled_actions.numpy() + noise  
+#         # sampled_actions = sampled_actions.numpy()
 
-    # print("SAMPLED_ACTIONS: ", sampled_actions)
+#     # print("SAMPLED_ACTIONS: ", sampled_actions)
 
-    # We make sure action is within bounds
-    legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
-    # print("BOUNDS: ", lower_bound, upper_bound)
-    # print("LEGAL_ACTION:", legal_action)
+#     # We make sure action is within bounds
+#     legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
+#     # print("BOUNDS: ", lower_bound, upper_bound)
+#     # print("LEGAL_ACTION:", legal_action)
 
-    return [np.squeeze(legal_action)]
+#     return [np.squeeze(legal_action)]
 
 ##########*****####################*****##########
 
@@ -298,30 +386,36 @@ def policy(state, noise_object):
 std_dev = 0.01
 ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
-actor_model = get_actor()
-critic_model = get_critic()
+actor_model = Actor()
+critic_model_1 = get_critic()
+critic_model_2 = get_critic()
+target_critic_1 = get_critic()
+target_critic_2 = get_critic()
 
-target_actor = get_actor()
-target_critic = get_critic()
+alpha=tf.Variable(0.0, dtype=tf.float64)
+target_entropy = -tf.constant(num_actions, dtype=tf.float64)
 
 # Making the weights equal initially
-target_actor.set_weights(actor_model.get_weights())
-target_critic.set_weights(critic_model.get_weights())
+# target_actor.set_weights(actor_model.get_weights())
+target_critic_1.set_weights(critic_model_1.get_weights())
+target_critic_2.set_weights(critic_model_2.get_weights())
 
 # Learning rate for actor-critic models
-critic_lr = 0.003
-actor_lr = 0.002
 
-critic_optimizer = tf.keras.optimizers.SGD(learning_rate=critic_lr, momentum=0.05, nesterov=False, name="SGD")
-actor_optimizer = tf.keras.optimizers.SGD(learning_rate=actor_lr, momentum=0.05, nesterov=False, name="SGD")
+lr = 0.003
 
-total_episodes = 4000
+alpha_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+critic_optimizer_1 = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+critic_optimizer_2 = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+
+total_episodes = 6000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
 tau = 0.05
 
-buffer = Buffer(100000, 256)
+buffer = Buffer(100000, 64)
 
 # populate buffer with demo
 # demo_sample_count = 0
@@ -509,7 +603,12 @@ while ep < total_episodes:
             state = np.concatenate(np.array(state_reshaped), axis = None)
 
             # if ep > total_episodes / 6.0:
-            buffer.record((prev_state, action, reward, state))
+            if done:
+                end = 0
+            else:
+                end = 1
+
+            buffer.record((prev_state, action, reward, state, end))
 
             episodic_reward += reward
 
