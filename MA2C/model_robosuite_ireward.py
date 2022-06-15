@@ -393,8 +393,8 @@ avg_reward_list = []
 
 
 #################### Training ####################
-
-best_avg_reward = 0.0
+best_ep_reward = 0.0
+# best_avg_reward = 0.0
 epsilon_INIT = 0.99
 epsilon = epsilon_INIT
 alpha_INIT = 0.5
@@ -535,18 +535,18 @@ while ep < total_episodes:
         # Mean of last 40 episodes
         avg_reward = np.mean(ep_reward_list[-40:])
         print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward), flush=True)
-        if(avg_reward > best_avg_reward):        
+        if(episodic_reward > best_ep_reward):        
             actor_model.save_weights("weights/best_actor.h5")
             critic_model.save_weights("weights/best_critic.h5")
 
             target_actor.save_weights("weights/best_target_actor.h5")
             target_critic.save_weights("weights/best_target_critic.h5")
-            best_avg_reward = avg_reward
+            best_ep_reward = episodic_reward
         avg_reward_list.append(avg_reward)
         print("TOTAL STEPS: ", t_steps, flush=True)
         print("EPSILON: ", epsilon, flush=True)
         print("ALPHA: ", alpha, flush=True)
-        epsilon = epsilon_INIT*(best_avg_reward*(1+alpha) - avg_reward)/(best_avg_reward)
+        epsilon = epsilon_INIT*(best_ep_reward*(1+alpha) - episodic_reward)/(best_ep_reward)
         alpha = alpha_INIT*np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
         eval_flag = True
 # Plotting graph
