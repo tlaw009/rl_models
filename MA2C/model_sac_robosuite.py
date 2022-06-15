@@ -565,7 +565,7 @@ while ep < total_episodes:
         eval_avg_reward_list.append(eval_avg_reward)
 
         print("Episode * {} * Avg eval Reward is ==> {}".format(ep, eval_avg_reward), flush=True)
-        ep = ep + 1
+
         eval_flag = False
 
     else:
@@ -640,6 +640,7 @@ while ep < total_episodes:
         # Mean of last 40 episodes
         avg_reward = np.mean(ep_reward_list[-40:])
         print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward), flush=True)
+        ep = ep + 1
         print("TOTAL STEPS: ", t_steps, flush=True)
         # if(avg_reward > best_avg_reward):        
         #     actor_model.save_weights("weights/best_actor.h5")
