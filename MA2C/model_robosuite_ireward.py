@@ -53,7 +53,7 @@ env = suite.make(
     env_name="Lift", # try with other tasks like "Stack" and "Door"
     robots="Panda",  # try with other robots like "Sawyer" and "Jaco"
     controller_configs=config,
-    has_renderer=False,
+    has_renderer=True,
     ignore_done=False,
     has_offscreen_renderer=False,
     reward_shaping=True,
@@ -419,7 +419,7 @@ while ep < total_episodes:
         while True:
             # Uncomment this to see the Actor in action
             # But not in a python notebook.
-            # env.render()
+            env.render()
 
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
@@ -490,7 +490,7 @@ while ep < total_episodes:
         while True:
             # Uncomment this to see the Actor in action
             # But not in a python notebook.
-            # env.render()
+            env.render()
 
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
