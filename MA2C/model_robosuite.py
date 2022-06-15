@@ -266,7 +266,7 @@ def policy(state, noise_object):
     # print(state.shape)
     e_greedy = False
     if np.random.rand() < epsilon:
-        sampled_actions = np.random.randn(num_actions)
+        sampled_actions = np.random.uniform(-1.0, 1.0, num_actions)
         e_greedy = True
         # print("RANDOM SAMPLED")
     else:
