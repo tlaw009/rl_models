@@ -12,6 +12,7 @@ import os
 import json
 import random
 import tensorflow_probability as tfp
+from tensorflow.keras import regularizers
 
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
@@ -202,7 +203,8 @@ class Buffer:
             y = tf.stop_gradient(reward_batch + gamma * done_batch * soft_q_target)
 
             critic2_loss = tf.reduce_mean((q2 - y)**2)
-
+        # print("CRITIC1_LOSS: ", critic1_loss)
+        # print("CRITIC2_LOSS: ",critic2_loss)
         grads1 = tape1.gradient(critic1_loss, critic_model_1.trainable_variables)
         critic1_optimizer.apply_gradients(zip(grads1,
                                                    critic_model_1.trainable_variables))
@@ -227,7 +229,7 @@ class Buffer:
             soft_q = min_q - alpha * log_pi_a
 
             actor_loss = -tf.reduce_mean(soft_q)
-
+        # print("ACTOR LOSS: ", actor_loss)
         variables = actor_model.trainable_variables
         grads = tape3.gradient(actor_loss, variables)
         actor_optimizer.apply_gradients(zip(grads, variables))
@@ -238,7 +240,7 @@ class Buffer:
 
             alpha_loss = tf.reduce_mean( -alpha*(log_pi_a +
                                                        target_entropy))
-
+        # print("ALPHA LOSS: ", alpha_loss)
         variables = [alpha]
         grads = tape4.gradient(alpha_loss, variables)
         alpha_optimizer.apply_gradients(zip(grads, variables))
@@ -283,8 +285,8 @@ class Actor(Model):
         self.action_dim = num_actions
         self.dense1_layer = layers.Dense(64, activation="tanh")
         self.dense2_layer = layers.Dense(64, activation="tanh")
-        self.mean_layer = layers.Dense(self.action_dim)
-        self.stdev_layer = layers.Dense(self.action_dim)
+        self.mean_layer = layers.Dense(self.action_dim, kernel_regularizer=regularizers.L1(0.01))
+        self.stdev_layer = layers.Dense(self.action_dim, kernel_regularizer=regularizers.L1(0.01))
 
     def call(self, state):
         # Get mean and standard deviation from the policy network
@@ -411,13 +413,13 @@ critic1_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nes
 critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 
-total_episodes = 6000
+total_episodes = 200
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
 tau = 0.05
 
-buffer = Buffer(100000, 64)
+buffer = Buffer(100000, 128)
 
 # populate buffer with demo
 # demo_sample_count = 0
@@ -492,7 +494,7 @@ avg_reward_list = []
 
 # best_avg_reward = 0.0
 
-epsilon = 0.99
+# epsilon = 0.99
 eval_flag = False
 ep = 0
 while ep < total_episodes:
@@ -643,8 +645,8 @@ while ep < total_episodes:
         #     target_critic.save_weights("weights/best_target_critic.h5")
         #     best_avg_reward = avg_reward
         avg_reward_list.append(avg_reward)
-        epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
-        print("EPSILON: ", epsilon)
+        # epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
+        # print("EPSILON: ", epsilon)
         eval_flag = True
 # Plotting graph
 # Episodes versus Avg. Rewards
@@ -658,8 +660,8 @@ plt.ylabel("Avg. Epsiodic Reward, eval")
 plt.show()
 ##########*****####################*****##########
 
-# actor_model.save_weights("weights/custom_actor_final.h5")
-# critic_model.save_weights("weights/custom_critic_final.h5")
+actor_model.save_weights("weights/custom_sac_actor_final.h5")
+critic_model.save_weights("weights/custom_sac_critic_final.h5")
 
-# target_actor.save_weights("weights/custom_target_actor_final.h5")
-# target_critic.save_weights("weights/custom_target_critic_final.h5")
+target_actor.save_weights("weights/custom_sac_target_actor_final.h5")
+target_critic.save_weights("weights/custom_sac_target_critic_final.h5")
