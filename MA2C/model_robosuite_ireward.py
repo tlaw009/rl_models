@@ -224,8 +224,8 @@ def get_actor():
 
     inputs = layers.Input(shape=(num_states,))
     # out = layers.Flatten()(inputs)
-    out = layers.Dense(64, activation="tanh")(inputs)
-    out = layers.Dense(64, activation="tanh")(out)
+    out = layers.Dense(128, activation="tanh")(inputs)
+    out = layers.Dense(128, activation="tanh")(out)
     outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
 
     # Our upper bound is 2.0 for Pendulum.
@@ -251,8 +251,8 @@ def get_critic():
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
-    out = layers.Dense(64, activation="tanh")(concat)
-    out = layers.Dense(64, activation="tanh")(out)
+    out = layers.Dense(128, activation="tanh")(concat)
+    out = layers.Dense(128, activation="tanh")(out)
     outputs = layers.Dense(1)(out)
 
     # Outputs single value for give state-action
@@ -309,13 +309,13 @@ target_actor.set_weights(actor_model.get_weights())
 target_critic.set_weights(critic_model.get_weights())
 
 # Learning rate for actor-critic models
-critic_lr = 0.003
-actor_lr = 0.002
+critic_lr = 0.0015
+actor_lr = 0.001
 
 critic_optimizer = tf.keras.optimizers.SGD(learning_rate=critic_lr, momentum=0.05, nesterov=False, name="SGD")
 actor_optimizer = tf.keras.optimizers.SGD(learning_rate=actor_lr, momentum=0.05, nesterov=False, name="SGD")
 
-total_episodes = 4000
+total_episodes = 5000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
@@ -401,6 +401,8 @@ alpha_INIT = 0.5
 alpha = alpha_INIT
 eval_flag = False
 ep = 0
+t_steps = 0
+
 while ep < total_episodes:
 
     if eval_flag:
@@ -520,7 +522,7 @@ while ep < total_episodes:
             buffer.learn()
             update_target(target_actor.variables, actor_model.variables, tau)
             update_target(target_critic.variables, critic_model.variables, tau)
-
+            t_steps += 1
             # End this episode when `done` is True
             if done:
                 break
@@ -541,10 +543,10 @@ while ep < total_episodes:
             target_critic.save_weights("weights/best_target_critic.h5")
             best_avg_reward = avg_reward
         avg_reward_list.append(avg_reward)
-
+        print("TOTAL STEPS: ", t_steps, flush=True)
         print("EPSILON: ", epsilon, flush=True)
         print("ALPHA: ", alpha, flush=True)
-        epsilon = epsilon_INIT*(best_avg_reward*(1+alpha) - avg_reward)/(best_avg_reward* (1+alpha))
+        epsilon = epsilon_INIT*(best_avg_reward*(1+alpha) - avg_reward)/(best_avg_reward)
         alpha = alpha_INIT*np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
         eval_flag = True
 # Plotting graph
