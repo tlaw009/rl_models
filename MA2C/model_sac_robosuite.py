@@ -17,6 +17,7 @@ from tensorflow.keras import regularizers
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
 
+EPSILON = 1e-16
 
 ################## GLOBAL SETUP P1 ##################
 
@@ -283,10 +284,10 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.dense1_layer = layers.Dense(64, activation="tanh")
-        self.dense2_layer = layers.Dense(64, activation="tanh")
-        self.mean_layer = layers.Dense(self.action_dim, kernel_regularizer=regularizers.L1(0.01))
-        self.stdev_layer = layers.Dense(self.action_dim, kernel_regularizer=regularizers.L1(0.01))
+        self.dense1_layer = layers.Dense(128, activation="tanh")
+        self.dense2_layer = layers.Dense(128, activation="tanh")
+        self.mean_layer = layers.Dense(self.action_dim, kernel_regularizer=regularizers.L2(0.01))
+        self.stdev_layer = layers.Dense(self.action_dim, kernel_regularizer=regularizers.L2(0.01))
 
     def call(self, state):
         # Get mean and standard deviation from the policy network
@@ -313,7 +314,7 @@ class Actor(Model):
         log_pi_ = dist.log_prob(action_)
         # Change log probability to account for tanh squashing as mentioned in
         # Appendix C of the paper
-        log_pi = log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2), axis=1,
+        log_pi = log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1,
                                          keepdims=True)
         # print("ACTION: ", action)
         return action, log_pi
@@ -343,8 +344,8 @@ def get_critic():
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
-    out = layers.Dense(64, activation="tanh")(concat)
-    out = layers.Dense(64, activation="tanh")(out)
+    out = layers.Dense(128, activation="tanh")(concat)
+    out = layers.Dense(128, activation="tanh")(out)
     outputs = layers.Dense(1, dtype='float64')(out)
 
     # Outputs single value for give state-action
@@ -417,7 +418,7 @@ total_episodes = 200
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
-tau = 0.05
+tau = 0.995
 
 buffer = Buffer(100000, 128)
 
