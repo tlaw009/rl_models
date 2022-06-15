@@ -651,7 +651,11 @@ while ep < total_episodes:
         avg_reward_list.append(avg_reward)
         # epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
         # print("EPSILON: ", epsilon)
-        eval_flag = True
+
+        #######################
+        #   switch training   #
+        #######################
+        eval_flag = False
 # Plotting graph
 # Episodes versus Avg. Rewards
 plt.plot(avg_reward_list)
