@@ -414,7 +414,7 @@ critic1_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nes
 critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 
-total_episodes = 15000
+total_episodes = 5000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
@@ -652,7 +652,7 @@ while ep < total_episodes:
         #     best_avg_reward = avg_reward
         avg_reward_list.append(avg_reward)
         epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
-        print("EPSILON: ", epsilon)
+        print("EPSILON: ", epsilon, flush=True)
 
         #######################
         #   switch training   #
@@ -664,10 +664,10 @@ plt.plot(avg_reward_list)
 plt.xlabel("Episode")
 plt.ylabel("Avg. Epsiodic Reward, train")
 plt.show()
-# plt.plot(eval_avg_reward_list)
-# plt.xlabel("Episode")
-# plt.ylabel("Avg. Epsiodic Reward, eval")
-# plt.show()
+plt.plot(eval_avg_reward_list)
+plt.xlabel("Episode")
+plt.ylabel("Avg. Epsiodic Reward, eval")
+plt.show()
 ##########*****####################*****##########
 
 # actor_model.save_weights("weights/custom_sac_actor_final.h5")
