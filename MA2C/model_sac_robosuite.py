@@ -414,7 +414,7 @@ critic1_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nes
 critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 
-total_episodes = 200
+total_episodes = 15000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
@@ -663,14 +663,14 @@ plt.plot(avg_reward_list)
 plt.xlabel("Episode")
 plt.ylabel("Avg. Epsiodic Reward, train")
 plt.show()
-plt.plot(eval_avg_reward_list)
-plt.xlabel("Episode")
-plt.ylabel("Avg. Epsiodic Reward, eval")
-plt.show()
+# plt.plot(eval_avg_reward_list)
+# plt.xlabel("Episode")
+# plt.ylabel("Avg. Epsiodic Reward, eval")
+# plt.show()
 ##########*****####################*****##########
 
-actor_model.save_weights("weights/custom_sac_actor_final.h5")
-critic_model.save_weights("weights/custom_sac_critic_final.h5")
+# actor_model.save_weights("weights/custom_sac_actor_final.h5")
+# critic_model.save_weights("weights/custom_sac_critic_final.h5")
 
-target_actor.save_weights("weights/custom_sac_target_actor_final.h5")
-target_critic.save_weights("weights/custom_sac_target_critic_final.h5")
+# target_actor.save_weights("weights/custom_sac_target_actor_final.h5")
+# target_critic.save_weights("weights/custom_sac_target_critic_final.h5")
