@@ -546,7 +546,7 @@ while ep < total_episodes:
         print("TOTAL STEPS: ", t_steps, flush=True)
         print("EPSILON: ", epsilon, flush=True)
         print("ALPHA: ", alpha, flush=True)
-        epsilon = epsilon_INIT*(best_ep_reward*(1+alpha) - episodic_reward)/(best_ep_reward)
+        epsilon = (1 - epsilon)*(best_ep_reward*(1+alpha) - episodic_reward)/(best_ep_reward)
         alpha = alpha_INIT*np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
         eval_flag = True
 # Plotting graph
