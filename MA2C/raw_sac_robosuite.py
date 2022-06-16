@@ -495,7 +495,7 @@ avg_reward_list = []
 
 # best_avg_reward = 0.0
 
-epsilon = 0.99
+# epsilon = 0.99
 eval_flag = False
 ep = 0
 t_steps = 0
@@ -564,7 +564,7 @@ while ep < total_episodes:
         eval_avg_reward = np.mean(eval_ep_reward_list[-40:])
         eval_avg_reward_list.append(eval_avg_reward)
 
-        print("Episode * {} * Avg eval Reward is ==> {}".format(ep-1, eval_avg_reward), flush=True)
+        print("Episode * {} * Avg eval Reward is ==> {}".format(ep, eval_avg_reward), flush=True)
 
         eval_flag = False
 
@@ -590,19 +590,18 @@ while ep < total_episodes:
             # env.render()
 
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
-            
-            if np.random.rand() < epsilon:
-                # action 
-                action = np.random.uniform(-1.0, 1.0, num_actions)
 
-            else:
-                # random sample
-                action, log_a = actor_model(tf_prev_state)
-                # print("ACTION: ", action)
-                action = action[0]
-
+            action, log_a = actor_model(tf_prev_state)
+            # print("ACTION: ", action)
+            action = action[0]
+            # print("ACTION: ", action)
+            # print("BUFFER AVG REWARD: ", avg_reward)
+            # Recieve state and reward from environment.
             state, reward, done, info = env.step(action)
             # print("ACT/R: ", action, "/", reward)
+
+            # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
+            # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
 
             # print(reward)
             state_reshaped = []
@@ -651,13 +650,13 @@ while ep < total_episodes:
         #     target_critic.save_weights("weights/best_target_critic.h5")
         #     best_avg_reward = avg_reward
         avg_reward_list.append(avg_reward)
-        epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
-        print("EPSILON: ", epsilon)
+        # epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
+        # print("EPSILON: ", epsilon)
 
         #######################
         #   switch training   #
         #######################
-        eval_flag = True
+        eval_flag = False
 # Plotting graph
 # Episodes versus Avg. Rewards
 plt.plot(avg_reward_list)
