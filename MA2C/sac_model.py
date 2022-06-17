@@ -513,7 +513,7 @@ avg_reward_list = []
 eval_flag = False
 ep = 0
 t_steps = 0
-while ep < total_episodes:
+while t_steps < 2000000:
 
     if eval_flag:
         prev_state = env.reset()
