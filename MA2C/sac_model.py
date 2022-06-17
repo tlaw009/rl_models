@@ -47,42 +47,56 @@ EPSILON = 1e-16
 
 # real env setup
 
-config = load_controller_config(default_controller="OSC_POSE")
+# config = load_controller_config(default_controller="OSC_POSE")
 
-obs_keys = ['robot0_joint_pos_cos', 'robot0_joint_pos_sin', 'robot0_joint_vel',
-                 'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos', 'robot0_gripper_qvel', 'object-state',
-                 'robot0_proprio-state', 'gripper_to_cube_pos', 'cube_quat', 'cube_pos']
+# obs_keys = ['robot0_joint_pos_cos', 'robot0_joint_pos_sin', 'robot0_joint_vel',
+#                  'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos', 'robot0_gripper_qvel', 'object-state',
+#                  'robot0_proprio-state', 'gripper_to_cube_pos', 'cube_quat', 'cube_pos']
 
 # problem = "Pendulum-v1"
 # env = gym.make(problem)
 
 
-env = suite.make(
-    env_name="Lift", # try with other tasks like "Stack" and "Door"
-    robots="Panda",  # try with other robots like "Sawyer" and "Jaco"
-    controller_configs=config,
-    has_renderer=False,
-    ignore_done=False,
-    has_offscreen_renderer=False,
-    reward_shaping=True,
-    use_camera_obs=False,
-)
+# env = suite.make(
+#     env_name="Lift", # try with other tasks like "Stack" and "Door"
+#     robots="Panda",  # try with other robots like "Sawyer" and "Jaco"
+#     controller_configs=config,
+#     has_renderer=False,
+#     ignore_done=False,
+#     has_offscreen_renderer=False,
+#     reward_shaping=True,
+#     use_camera_obs=False,
+# )
 
 
-obs_dim = []
-for x in obs_keys:
-    obs_dim.append(env.observation_spec()[x].shape[0])
+# obs_dim = []
+# for x in obs_keys:
+#     obs_dim.append(env.observation_spec()[x].shape[0])
 
-state_dim = np.sum(obs_dim, dtype=np.int32)
+# state_dim = np.sum(obs_dim, dtype=np.int32)
 
 
-num_states = state_dim.item()
+# num_states = state_dim.item()
+# print("Size of State Space ->  {}".format(num_states), flush=True)
+# num_actions = env.action_dim
+# print("Size of Action Space ->  {}".format(num_actions), flush=True)
+
+# upper_bound = env.action_spec[1][0]
+# lower_bound = env.action_spec[0][0]
+
+# print("Max Value of Action ->  {}".format(upper_bound), flush=True)
+# print("Min Value of Action ->  {}".format(lower_bound), flush=True)
+
+problem = "Humanoid-v2"
+env = gym.make(problem)
+
+num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states), flush=True)
-num_actions = env.action_dim
+num_actions = env.action_space.shape[0]
 print("Size of Action Space ->  {}".format(num_actions), flush=True)
 
-upper_bound = env.action_spec[1][0]
-lower_bound = env.action_spec[0][0]
+upper_bound = env.action_space.high[0]
+lower_bound = env.action_space.low[0]
 
 print("Max Value of Action ->  {}".format(upper_bound), flush=True)
 print("Min Value of Action ->  {}".format(lower_bound), flush=True)
@@ -168,7 +182,7 @@ class Buffer:
             q1 = critic_model_1([state_batch, action_batch], training = True)
 
             # Sample actions from the policy for next states
-            pi_a, log_pi_a = actor_model(next_state_batch)
+            pi_a, log_pi_a = actor_model(next_state_batch, training = True)
 
             # Get Q value estimates from target Q network
             q1_target = target_critic_1([next_state_batch, pi_a], training = True)
@@ -189,7 +203,7 @@ class Buffer:
             q2 = critic_model_2([state_batch, action_batch], training = True)
 
             # Sample actions from the policy for next states
-            pi_a, log_pi_a = actor_model(next_state_batch)
+            pi_a, log_pi_a = actor_model(next_state_batch, training = True)
 
             # Get Q value estimates from target Q network
             q1_target = target_critic_1([next_state_batch, pi_a], training = True)
@@ -217,7 +231,7 @@ class Buffer:
 
         with tf.GradientTape() as tape3:
             # Sample actions from the policy for current states
-            pi_a, log_pi_a = actor_model(state_batch)
+            pi_a, log_pi_a = actor_model(state_batch, training = True)
 
             # Get Q value estimates from target Q network
             q1 = critic_model_1([state_batch, pi_a], training = True)
@@ -227,9 +241,9 @@ class Buffer:
             # Get the minimum Q value of the 2 target networks
             min_q = tf.minimum(q1, q2)
 
-            soft_q = min_q - alpha * log_pi_a
+            soft_q = alpha * log_pi_a - min_q
 
-            actor_loss = -tf.reduce_mean(soft_q)
+            actor_loss = tf.reduce_mean(soft_q)
         # print("ACTOR LOSS: ", actor_loss)
         variables = actor_model.trainable_variables
         grads = tape3.gradient(actor_loss, variables)
@@ -237,9 +251,9 @@ class Buffer:
 
         with tf.GradientTape() as tape4:
             # Sample actions from the policy for current states
-            pi_a, log_pi_a = actor_model(state_batch)
+            pi_a, log_pi_a = actor_model(state_batch, training = True)
 
-            alpha_loss = tf.reduce_mean( -alpha*(log_pi_a +
+            alpha_loss = tf.reduce_mean( -alpha*tf.stop_gradient(log_pi_a +
                                                        target_entropy))
         # print("ALPHA LOSS: ", alpha_loss)
         variables = [alpha]
@@ -286,8 +300,8 @@ class Actor(Model):
         self.action_dim = num_actions
         self.dense1_layer = layers.Dense(128, activation="tanh")
         self.dense2_layer = layers.Dense(128, activation="tanh")
-        self.mean_layer = layers.Dense(self.action_dim, kernel_regularizer=regularizers.L2(0.01))
-        self.stdev_layer = layers.Dense(self.action_dim, kernel_regularizer=regularizers.L2(0.01))
+        self.mean_layer = layers.Dense(self.action_dim)
+        self.stdev_layer = layers.Dense(self.action_dim)
 
     def call(self, state):
         # Get mean and standard deviation from the policy network
@@ -322,7 +336,7 @@ class Actor(Model):
     @property
     def trainable_variables(self):
         return self.dense1_layer.trainable_variables + \
-                self.dense1_layer.trainable_variables + \
+                self.dense2_layer.trainable_variables + \
                 self.mean_layer.trainable_variables + \
                 self.stdev_layer.trainable_variables
 
@@ -398,7 +412,7 @@ target_critic_1 = get_critic()
 target_critic_2 = get_critic()
 
 alpha=tf.Variable(0.0, dtype=tf.float64)
-target_entropy = -tf.constant(num_actions, dtype=tf.float64)
+target_entropy = -np.prod(num_actions)
 
 # Making the weights equal initially
 # target_actor.set_weights(actor_model.get_weights())
@@ -503,12 +517,13 @@ while ep < total_episodes:
 
     if eval_flag:
         prev_state = env.reset()
-        prev_state_reshaped = []
 
-        for x in obs_keys:
-            prev_state_reshaped.append(prev_state[x])
+        # prev_state_reshaped = []
 
-        prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
+        # for x in obs_keys:
+        #     prev_state_reshaped.append(prev_state[x])
+
+        # prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
 
         eval_episodic_reward = 0
 
@@ -533,12 +548,12 @@ while ep < total_episodes:
             # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
 
             # print(reward)
-            state_reshaped = []
+            # state_reshaped = []
 
-            for x in obs_keys:
-                state_reshaped.append(state[x])
+            # for x in obs_keys:
+            #     state_reshaped.append(state[x])
 
-            state = np.concatenate(np.array(state_reshaped), axis = None)
+            # state = np.concatenate(np.array(state_reshaped), axis = None)
 
             # if ep > total_episodes / 6.0:
             # buffer.record((prev_state, action, reward, state))
@@ -576,11 +591,11 @@ while ep < total_episodes:
 
         # prev_dist_to_goal = np.linalg.norm(prev_state['gripper_to_cube_pos'])
 
-        prev_state_reshaped = []
-        for x in obs_keys:
-            prev_state_reshaped.append(prev_state[x])
+        # prev_state_reshaped = []
+        # for x in obs_keys:
+        #     prev_state_reshaped.append(prev_state[x])
 
-        prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
+        # prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
 
         episodic_reward = 0
 
@@ -597,19 +612,19 @@ while ep < total_episodes:
             # print("ACTION: ", action)
             # print("BUFFER AVG REWARD: ", avg_reward)
             # Recieve state and reward from environment.
-            state, reward, done, info = env.step(action)
+            state, reward, done, info = env.step(action*upper_bound)
             # print("ACT/R: ", action, "/", reward)
 
             # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
             # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
 
             # print(reward)
-            state_reshaped = []
+            # state_reshaped = []
 
-            for x in obs_keys:
-                state_reshaped.append(state[x])
+            # for x in obs_keys:
+            #     state_reshaped.append(state[x])
 
-            state = np.concatenate(np.array(state_reshaped), axis = None)
+            # state = np.concatenate(np.array(state_reshaped), axis = None)
 
             # if ep > total_episodes / 6.0:
             if done:

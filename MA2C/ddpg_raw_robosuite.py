@@ -224,8 +224,8 @@ def get_actor():
 
     inputs = layers.Input(shape=(num_states,))
     # out = layers.Flatten()(inputs)
-    out = layers.Dense(64, activation="tanh")(inputs)
-    out = layers.Dense(64, activation="tanh")(out)
+    out = layers.Dense(128, activation="tanh")(inputs)
+    out = layers.Dense(128, activation="tanh")(out)
     outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
 
     # Our upper bound is 2.0 for Pendulum.
@@ -251,8 +251,8 @@ def get_critic():
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
-    out = layers.Dense(64, activation="tanh")(concat)
-    out = layers.Dense(64, activation="tanh")(out)
+    out = layers.Dense(128, activation="tanh")(concat)
+    out = layers.Dense(128, activation="tanh")(out)
     outputs = layers.Dense(1)(out)
 
     # Outputs single value for give state-action
