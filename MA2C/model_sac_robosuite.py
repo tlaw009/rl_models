@@ -168,7 +168,7 @@ class Buffer:
             q1 = critic_model_1([state_batch, action_batch], training = True)
 
             # Sample actions from the policy for next states
-            pi_a, log_pi_a = actor_model(next_state_batch)
+            pi_a, log_pi_a = actor_model(next_state_batch, training = True)
 
             # Get Q value estimates from target Q network
             q1_target = target_critic_1([next_state_batch, pi_a], training = True)
@@ -189,7 +189,7 @@ class Buffer:
             q2 = critic_model_2([state_batch, action_batch], training = True)
 
             # Sample actions from the policy for next states
-            pi_a, log_pi_a = actor_model(next_state_batch)
+            pi_a, log_pi_a = actor_model(next_state_batch, training = True)
 
             # Get Q value estimates from target Q network
             q1_target = target_critic_1([next_state_batch, pi_a], training = True)
@@ -217,7 +217,7 @@ class Buffer:
 
         with tf.GradientTape() as tape3:
             # Sample actions from the policy for current states
-            pi_a, log_pi_a = actor_model(state_batch)
+            pi_a, log_pi_a = actor_model(state_batch, training = True)
 
             # Get Q value estimates from target Q network
             q1 = critic_model_1([state_batch, pi_a], training = True)
@@ -227,19 +227,19 @@ class Buffer:
             # Get the minimum Q value of the 2 target networks
             min_q = tf.minimum(q1, q2)
 
-            soft_q = min_q - alpha * log_pi_a
+            soft_q = alpha * log_pi_a - min_q
 
-            actor_loss = -tf.reduce_mean(soft_q)
+            actor_loss = tf.reduce_mean(soft_q)
         # print("ACTOR LOSS: ", actor_loss)
-        variables = actor_model.trainable_variables
+        variables = actor_model.trainable_variables()
         grads = tape3.gradient(actor_loss, variables)
         actor_optimizer.apply_gradients(zip(grads, variables))
 
         with tf.GradientTape() as tape4:
             # Sample actions from the policy for current states
-            pi_a, log_pi_a = actor_model(state_batch)
+            pi_a, log_pi_a = actor_model(state_batch, training = True)
 
-            alpha_loss = tf.reduce_mean( -alpha*(log_pi_a +
+            alpha_loss = tf.reduce_mean( -alpha*tf.stop_gradient(log_pi_a +
                                                        target_entropy))
         # print("ALPHA LOSS: ", alpha_loss)
         variables = [alpha]
@@ -286,8 +286,8 @@ class Actor(Model):
         self.action_dim = num_actions
         self.dense1_layer = layers.Dense(128, activation="tanh")
         self.dense2_layer = layers.Dense(128, activation="tanh")
-        self.mean_layer = layers.Dense(self.action_dim, kernel_regularizer=regularizers.L2(0.01))
-        self.stdev_layer = layers.Dense(self.action_dim, kernel_regularizer=regularizers.L2(0.01))
+        self.mean_layer = layers.Dense(self.action_dim)
+        self.stdev_layer = layers.Dense(self.action_dim)
 
     def call(self, state):
         # Get mean and standard deviation from the policy network
@@ -319,10 +319,10 @@ class Actor(Model):
         # print("ACTION: ", action)
         return action, log_pi
 
-    @property
+    # @property
     def trainable_variables(self):
         return self.dense1_layer.trainable_variables + \
-                self.dense1_layer.trainable_variables + \
+                self.dense2_layer.trainable_variables + \
                 self.mean_layer.trainable_variables + \
                 self.stdev_layer.trainable_variables
 
@@ -398,7 +398,7 @@ target_critic_1 = get_critic()
 target_critic_2 = get_critic()
 
 alpha=tf.Variable(0.0, dtype=tf.float64)
-target_entropy = -tf.constant(num_actions, dtype=tf.float64)
+target_entropy = -np.prod(num_actions)
 
 # Making the weights equal initially
 # target_actor.set_weights(actor_model.get_weights())
