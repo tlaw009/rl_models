@@ -87,7 +87,7 @@ EPSILON = 1e-16
 # print("Max Value of Action ->  {}".format(upper_bound), flush=True)
 # print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
-problem = "Humanoid-v2"
+problem = "Hopper-v2"
 env = gym.make(problem)
 
 num_states = env.observation_space.shape[0]
@@ -431,7 +431,7 @@ target_entropy = -np.prod(num_actions)
 
 # Learning rate for actor-critic models
 
-lr = 0.0015
+lr = 0.0003
 
 alpha_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 critic1_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
@@ -444,7 +444,7 @@ gamma = 0.99
 # Used to update target networks
 tau = 0.005
 
-buffer = Buffer(100000, 128)
+buffer = Buffer(100000, 64)
 
 # populate buffer with demo
 # demo_sample_count = 0
