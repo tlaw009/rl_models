@@ -298,8 +298,8 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.dense1_layer = layers.Dense(64, activation="tanh")
-        self.dense2_layer = layers.Dense(64, activation="relu")
+        self.dense1_layer = layers.Dense(32, activation="tanh")
+        self.dense2_layer = layers.Dense(32, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
         self.stdev_layer = layers.Dense(self.action_dim)
 
@@ -350,19 +350,19 @@ class Actor(Model):
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_out = layers.Dense(32, activation="tanh")(state_input)
+    state_out = layers.Dense(16, activation="tanh")(state_input)
     # state_out = layers.Dense(32, activation="relu")(state_out)
 
     # Action as input
     action_input = layers.Input(shape=(num_actions))
-    action_out = layers.Dense(32, activation="tanh")(action_input)
+    action_out = layers.Dense(16, activation="tanh")(action_input)
 
 
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
-    out = layers.Dense(64, activation="relu")(concat)
-    out = layers.Dense(64, activation="relu")(out)
+    out = layers.Dense(32, activation="relu")(concat)
+    out = layers.Dense(32, activation="relu")(out)
     outputs = layers.Dense(1, dtype='float64')(out)
 
     # Outputs single value for give state-action
@@ -442,7 +442,7 @@ gamma = 0.99
 # Used to update target networks
 tau = 0.005
 
-buffer = Buffer(100000, 64)
+buffer = Buffer(100000, 256)
 
 # populate buffer with demo
 # demo_sample_count = 0
