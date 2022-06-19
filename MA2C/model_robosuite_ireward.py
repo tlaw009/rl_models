@@ -312,8 +312,11 @@ target_critic.set_weights(critic_model.get_weights())
 critic_lr = 0.0003
 actor_lr = 0.0003
 
-critic_optimizer = tf.keras.optimizers.Adam(learning_rate=critic_lr)
-actor_optimizer = tf.keras.optimizers.Adam(learning_rate=actor_lr)
+critic_optimizer = tf.keras.optimizers.SGD(learning_rate=critic_lr, momentum=0.05, nesterov=False, name="SGD")
+actor_optimizer = tf.keras.optimizers.SGD(learning_rate=actor_lr, momentum=0.05, nesterov=False, name="SGD")
+
+# critic_optimizer = tf.keras.optimizers.Adam(learning_rate=critic_lr)
+# actor_optimizer = tf.keras.optimizers.Adam(learning_rate=actor_lr)
 
 total_episodes = 5000
 # Discount factor for future rewards
