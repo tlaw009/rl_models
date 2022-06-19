@@ -288,14 +288,7 @@ class Buffer:
 def update_target(target_weights, weights, tau):
     for (a, b) in zip(target_weights, weights):
         a.assign(b * tau + a * (1 - tau))
-# def update_target():
-#         for theta_target, theta in zip(target_critic_1.trainable_variables,
-#                                        critic_model_1.trainable_variables):
-#             theta_target = tau * theta_target + (1 - tau) * theta
 
-#         for theta_target, theta in zip(target_critic_2.trainable_variables,
-#                                        critic_model_2.trainable_variables):
-#             theta_target = tau * theta_target + (1 - tau) * theta
 ##########*****####################*****##########
 
 #################### Models ####################
@@ -305,8 +298,8 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.dense1_layer = layers.Dense(128, activation="tanh")
-        self.dense2_layer = layers.Dense(128, activation="tanh")
+        self.dense1_layer = layers.Dense(64, activation="relu")
+        self.dense2_layer = layers.Dense(64, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
         self.stdev_layer = layers.Dense(self.action_dim)
 
@@ -357,19 +350,19 @@ class Actor(Model):
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_out = layers.Dense(16, activation="tanh")(state_input)
-    state_out = layers.Dense(32, activation="tanh")(state_out)
+    state_out = layers.Dense(32, activation="relu")(state_input)
+    # state_out = layers.Dense(32, activation="relu")(state_out)
 
     # Action as input
     action_input = layers.Input(shape=(num_actions))
-    action_out = layers.Dense(32, activation="tanh")(action_input)
+    action_out = layers.Dense(32, activation="relu")(action_input)
 
 
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
-    out = layers.Dense(128, activation="tanh")(concat)
-    out = layers.Dense(128, activation="tanh")(out)
+    out = layers.Dense(64, activation="relu")(concat)
+    # out = layers.Dense(64, activation="relu")(out)
     outputs = layers.Dense(1, dtype='float64')(out)
 
     # Outputs single value for give state-action
@@ -433,10 +426,10 @@ target_entropy = -np.prod(num_actions)
 
 lr = 0.0003
 
-alpha_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
-critic1_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
-critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
-actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
 
 total_episodes = 5000
 # Discount factor for future rewards
@@ -523,7 +516,7 @@ avg_reward_list = []
 eval_flag = False
 ep = 0
 t_steps = 0
-while t_steps < 10000000:
+while t_steps < 1000000:
 
     if eval_flag:
         prev_state = env.reset()
