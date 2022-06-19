@@ -426,10 +426,15 @@ target_entropy = -np.prod(num_actions)
 
 lr = 0.0003
 
-alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+alpha_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+critic1_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
+
+# alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+# critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+# critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+# actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
 
 total_episodes = 5000
 # Discount factor for future rewards
