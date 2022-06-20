@@ -298,7 +298,7 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.dense1_layer = layers.Dense(32, activation="tanh")
+        self.dense1_layer = layers.Dense(32, activation="relu")
         self.dense2_layer = layers.Dense(32, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
         self.stdev_layer = layers.Dense(self.action_dim)
@@ -350,12 +350,12 @@ class Actor(Model):
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_out = layers.Dense(16, activation="tanh")(state_input)
+    state_out = layers.Dense(16, activation="relu")(state_input)
     # state_out = layers.Dense(32, activation="relu")(state_out)
 
     # Action as input
     action_input = layers.Input(shape=(num_actions))
-    action_out = layers.Dense(16, activation="tanh")(action_input)
+    action_out = layers.Dense(16, activation="relu")(action_input)
 
 
     # Both are passed through seperate layer before concatenating
