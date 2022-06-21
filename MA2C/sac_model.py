@@ -190,7 +190,7 @@ class Buffer:
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
-            min_q_target = tf.minimum(q1_target, q2_target)
+            min_q_target = tf.reduce_min([q1_target, q2_target], axis=0)
             # min_q_target = tf.reduce_mean(min_q_target)
             # Add the entropy term to get soft Q target
             soft_q_target = min_q_target - alpha * log_pi_a
@@ -212,7 +212,7 @@ class Buffer:
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
-            min_q_target = tf.minimum(q1_target, q2_target)
+            min_q_target = tf.reduce_min([q1_target, q2_target], axis=0)
             # min_q_target = tf.reduce_mean(min_q_target)
             # Add the entropy term to get soft Q target
             soft_q_target = min_q_target - alpha * log_pi_a
@@ -243,7 +243,7 @@ class Buffer:
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
             # soft_q = tf.reduce_mean([q1, q2])
-            soft_q = tf.minimum(q1, q2)
+            soft_q = tf.reduce_mean([q1, q2], axis=0)
             actor_losses = alpha*log_pi_a - soft_q
             actor_loss = tf.nn.compute_average_loss(actor_losses)
         # print("ACTOR LOSS: ", actor_loss)
@@ -298,8 +298,8 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.dense1_layer = layers.Dense(32, activation="relu")
-        self.dense2_layer = layers.Dense(32, activation="relu")
+        self.dense1_layer = layers.Dense(64, activation="relu")
+        self.dense2_layer = layers.Dense(64, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
         self.stdev_layer = layers.Dense(self.action_dim)
 
@@ -334,7 +334,7 @@ class Actor(Model):
                                          keepdims=True)
         # print("LOG_PI: ", tf.reduce_mean(log_pi))
         # print("ACTION: ", action)
-        return action * upper_bound, log_pi
+        return action, log_pi
 
     # @property
     # def trainable_variables(self):
@@ -350,19 +350,19 @@ class Actor(Model):
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_out = layers.Dense(16, activation="relu")(state_input)
+    state_out = layers.Dense(32, activation="relu")(state_input)
     # state_out = layers.Dense(32, activation="relu")(state_out)
 
     # Action as input
     action_input = layers.Input(shape=(num_actions))
-    action_out = layers.Dense(16, activation="relu")(action_input)
+    action_out = layers.Dense(32, activation="relu")(action_input)
 
 
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
-    out = layers.Dense(32, activation="relu")(concat)
-    out = layers.Dense(32, activation="relu")(out)
+    out = layers.Dense(64, activation="relu")(concat)
+    out = layers.Dense(64, activation="relu")(out)
     outputs = layers.Dense(1, dtype='float64')(out)
 
     # Outputs single value for give state-action
@@ -442,7 +442,7 @@ gamma = 0.99
 # Used to update target networks
 tau = 0.005
 
-buffer = Buffer(100000, 256)
+buffer = Buffer(100000, 64)
 
 # populate buffer with demo
 # demo_sample_count = 0
@@ -547,7 +547,7 @@ while t_steps < 1000000:
             # print("ACTION: ", action)
             # print("BUFFER AVG REWARD: ", avg_reward)
             # Recieve state and reward from environment.
-            state, reward, done, info = env.step(sampled_actions)
+            state, reward, done, info = env.step(sampled_actions * upper_bound)
 
             eval_episodic_reward += reward
             # print("ACT/R: ", action, "/", reward)
@@ -621,7 +621,7 @@ while t_steps < 1000000:
             # print("ACTION: ", action)
             # print("BUFFER AVG REWARD: ", avg_reward)
             # Recieve state and reward from environment.
-            state, reward, done, info = env.step(action)
+            state, reward, done, info = env.step(action * upper_bound)
             # print("ACT/R: ", action, "/", reward)
 
             # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
