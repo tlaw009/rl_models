@@ -224,8 +224,8 @@ def get_actor():
 
     inputs = layers.Input(shape=(num_states,))
     # out = layers.Flatten()(inputs)
-    out = layers.Dense(32, activation="relu")(inputs)
-    out = layers.Dense(32, activation="relu")(out)
+    out = layers.Dense(64, activation="relu")(inputs)
+    out = layers.Dense(64, activation="relu")(out)
     outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
 
     # Our upper bound is 2.0 for Pendulum.
@@ -240,19 +240,19 @@ def get_actor():
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_out = layers.Dense(16, activation="relu")(state_input)
+    state_out = layers.Dense(32, activation="relu")(state_input)
     # state_out = layers.Dense(32, activation="relu")(state_out)
 
     # Action as input
     action_input = layers.Input(shape=(num_actions))
-    action_out = layers.Dense(16, activation="relu")(action_input)
+    action_out = layers.Dense(32, activation="relu")(action_input)
 
 
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
-    out = layers.Dense(32, activation="relu")(concat)
-    out = layers.Dense(32, activation="relu")(out)
+    out = layers.Dense(64, activation="relu")(concat)
+    out = layers.Dense(64, activation="relu")(out)
     outputs = layers.Dense(1)(out)
 
     # Outputs single value for give state-action
@@ -322,9 +322,9 @@ total_episodes = 5000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
-tau = 0.05
+tau = 0.005
 
-buffer = Buffer(100000, 256)
+buffer = Buffer(100000, 64)
 
 # populate buffer with demo
 # demo_sample_count = 0
