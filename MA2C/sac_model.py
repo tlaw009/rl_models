@@ -21,72 +21,6 @@ EPSILON = 1e-16
 
 ################## GLOBAL SETUP P1 ##################
 
-# demo env setup
-
-# demo_path = "/home/tony/rl_demo/1653334277_0912106"
-
-# hdf5_path = os.path.join(demo_path, "demo.hdf5")
-
-# f = h5py.File(hdf5_path, "r")
-
-# env_name = f["data"].attrs["env"]
-
-# env_info = json.loads(f["data"].attrs["env_info"])
-
-# demo_env = suite.make(
-#     **env_info,
-#     has_renderer=False,
-#     has_offscreen_renderer=False,
-#     ignore_done=True,
-#     use_camera_obs=False,
-#     reward_shaping=True,
-#     control_freq=20,
-# )
-
-# demos = list(f["data"].keys())
-
-# real env setup
-
-# config = load_controller_config(default_controller="OSC_POSE")
-
-# obs_keys = ['robot0_joint_pos_cos', 'robot0_joint_pos_sin', 'robot0_joint_vel',
-#                  'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos', 'robot0_gripper_qvel', 'object-state',
-#                  'robot0_proprio-state', 'gripper_to_cube_pos', 'cube_quat', 'cube_pos']
-
-# problem = "Pendulum-v1"
-# env = gym.make(problem)
-
-
-# env = suite.make(
-#     env_name="Lift", # try with other tasks like "Stack" and "Door"
-#     robots="Panda",  # try with other robots like "Sawyer" and "Jaco"
-#     controller_configs=config,
-#     has_renderer=False,
-#     ignore_done=False,
-#     has_offscreen_renderer=False,
-#     reward_shaping=True,
-#     use_camera_obs=False,
-# )
-
-
-# obs_dim = []
-# for x in obs_keys:
-#     obs_dim.append(env.observation_spec()[x].shape[0])
-
-# state_dim = np.sum(obs_dim, dtype=np.int32)
-
-
-# num_states = state_dim.item()
-# print("Size of State Space ->  {}".format(num_states), flush=True)
-# num_actions = env.action_dim
-# print("Size of Action Space ->  {}".format(num_actions), flush=True)
-
-# upper_bound = env.action_spec[1][0]
-# lower_bound = env.action_spec[0][0]
-
-# print("Max Value of Action ->  {}".format(upper_bound), flush=True)
-# print("Min Value of Action ->  {}".format(lower_bound), flush=True)
-
 problem = "Hopper-v2"
 env = gym.make(problem)
 
@@ -106,32 +40,9 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
 #################### Auxiliaries ####################
 
-# class OUActionNoise:
-#     def __init__(self, mean, std_deviation, theta=0.15, dt=1e-2, x_initial=None):
-#         self.theta = theta
-#         self.mean = mean
-#         self.std_dev = std_deviation
-#         self.dt = dt
-#         self.x_initial = x_initial
-#         self.reset()
-
-#     def __call__(self):
-#         # Formula taken from https://www.wikipedia.org/wiki/Ornstein-Uhlenbeck_process.
-#         x = (
-#             self.x_prev
-#             + self.theta * (self.mean - self.x_prev) * self.dt
-#             + self.std_dev * np.sqrt(self.dt) * np.random.normal(size=self.mean.shape)
-#         )
-#         # Store x into x_prev
-#         # Makes next noise dependent on current one
-#         self.x_prev = x
-#         return x
-
-#     def reset(self):
-#         if self.x_initial is not None:
-#             self.x_prev = self.x_initial
-#         else:
-#             self.x_prev = np.zeros_like(self.mean)
+###################
+#Missing Fun Stuff#
+###################
 
 ##########*****####################*****##########
 
@@ -156,7 +67,7 @@ class Buffer:
         self.next_state_buffer = np.zeros((self.buffer_capacity, num_states))
         self.done_buffer = np.zeros((self.buffer_capacity, 1))
 
-    # Takes (s,a,r,s') obervation tuple as input
+    # Takes (s,a,r,s',d) obervation tuple as input
     def record(self, obs_tuple):
         # Set index to zero if buffer_capacity is exceeded,
         # replacing old records
@@ -175,12 +86,10 @@ class Buffer:
     ):
 
         # Training and updating Actor & Critic networks.
-        # print("REWARD_BATCH: ", reward_batch)
-
         with tf.GradientTape() as tape1:
             # Get Q value estimates, action used here is from the replay buffer
             q1 = critic_model_1([state_batch, action_batch])
-            # print("Q1: ", tf.reduce_mean(q1))
+
             # Sample actions from the policy for next states
             pi_a, log_pi_a = actor_model(next_state_batch)
 
@@ -191,10 +100,12 @@ class Buffer:
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
             min_q_target = tf.math.minimum(q1_target, q2_target)
-            # min_q_target = tf.reduce_mean(min_q_target)
+
             # Add the entropy term to get soft Q target
             soft_q_target = min_q_target - alpha * log_pi_a
+
             y = tf.stop_gradient(reward_batch + gamma * done_batch * soft_q_target)
+
             critic1_losses = 0.5 * (
                     tf.losses.MSE(y_true=y, y_pred=q1))
             critic1_loss = tf.nn.compute_average_loss(critic1_losses)
@@ -213,19 +124,16 @@ class Buffer:
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
             min_q_target = tf.math.minimum(q1_target, q2_target)
-            # min_q_target = tf.reduce_mean(min_q_target)
+
             # Add the entropy term to get soft Q target
             soft_q_target = min_q_target - alpha * log_pi_a
-            # print(soft_q_target.shape)
+
             y = tf.stop_gradient(reward_batch + gamma * done_batch * soft_q_target)
-            # print(y.shape)
-            # print(q2.shape)
+
             critic2_losses = 0.5 * (
                     tf.losses.MSE(y_true=y, y_pred=q2))
             critic2_loss = tf.nn.compute_average_loss(critic2_losses)
-        # print("DONE: ", done_batch)
-        # print("CRITIC1_LOSS: ", critic1_loss)
-        # print("CRITIC2_LOSS: ",critic2_loss)
+
         grads1 = tape1.gradient(critic1_loss, critic_model_1.trainable_variables)
         critic1_optimizer.apply_gradients(zip(grads1,
                                                    critic_model_1.trainable_variables))
@@ -238,36 +146,27 @@ class Buffer:
         with tf.GradientTape() as tape3:
             # Sample actions from the policy for current states
             pi_a, log_pi_a = actor_model(state_batch)
-            # print("ACTION: ", tf.reduce_mean(pi_a))
-            # Get Q value estimates from target Q network
+
             q1 = critic_model_1([state_batch, pi_a])
             q2 = critic_model_2([state_batch, pi_a])
 
-            # Apply the clipped double Q trick
-            # Get the minimum Q value of the 2 target networks
-            # soft_q = tf.reduce_mean([q1, q2])
             soft_q = tf.math.minimum(q1, q2)
-            # print(soft_q.shape)
+
             actor_losses = tf.math.add(tf.math.multiply(alpha,log_pi_a), -soft_q)
-            # print(alpha.shape)
-            # print(actor_losses.shape)
             actor_loss = tf.nn.compute_average_loss(actor_losses)
-            # print(actor_loss)
-        # print("ACTOR LOSS: ", actor_loss)
-        # print("A Soft Q: ", tf.reduce_mean(soft_q))
+
         variables3 = actor_model.trainable_variables
-        grads3 = tape3.gradient(actor_loss, variables3, unconnected_gradients=tf.UnconnectedGradients.ZERO)
-        # print(variables3)
-        # print(list(zip(grads3, variables3)))
+        grads3 = tape3.gradient(actor_loss, variables3,
+                                 # unconnected_gradients=tf.UnconnectedGradients.ZERO)
+                                    )
         actor_optimizer.apply_gradients(zip(grads3, variables3))
 
         with tf.GradientTape() as tape4:
             # Sample actions from the policy for current states
             pi_a, log_pi_a = actor_model(state_batch)
-
-            alpha_loss = tf.reduce_mean( -alpha*tf.stop_gradient(log_pi_a +
+            alpha_loss = tf.nn.compute_average_loss(-alpha*tf.stop_gradient(log_pi_a +
                                                        target_entropy))
-        # print("ALPHA LOSS: ", alpha_loss)
+
         variables4 = [alpha]
         grads4 = tape4.gradient(alpha_loss, variables4)
         alpha_optimizer.apply_gradients(zip(grads4, variables4))
@@ -293,7 +192,6 @@ class Buffer:
 # This update target parameters slowly
 # Based on rate `tau`, which is much less than one.
 # @tf.function
-
 def update_target(target_weights, weights, tau):
     for (a, b) in zip(target_weights, weights):
         a.assign(b * tau + a * (1 - tau))
@@ -322,53 +220,27 @@ class Actor(Model):
         # therefore we produce log stdev as output which can be [-inf, inf]
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
-        covar_m = np.zeros((sigma.shape[0], self.action_dim, self.action_dim), dtype='float64')
-        # print(covar_m.shape)
-        for i in range(sigma.shape[0]):
-            for j in range(self.action_dim):
-                covar_m[i][j][j] = sigma[i][j]**2
-        covar_m = tf.convert_to_tensor(covar_m)
-        # print(covar_m.shape)
-        # Use re-parameterization trick to deterministically sample action from
-        # the policy network. First, sample from a Normal distribution of
-        # sample size as the action and multiply it with stdev
-        # print("MU SIG: ", mu, sigma)
-        # dist = tfp.distributions.Normal(mu, sigma)
-        # dist = tfp.distributions.MultivariateNormalFullCovariance(loc = mu, covariance_matrix = covar_m)
-        dist = tfp.distributions.MultivariateNormalTriL(loc=mu, scale_tril=tf.linalg.cholesky(covar_m))
-        # print("MU: ", tf.reduce_mean(mu))
 
+        covar_m = tf.linalg.diag(sigma**2)
+
+        # dist = tfp.distributions.Normal(mu, sigma)
+        dist = tfp.distributions.MultivariateNormalTriL(loc=mu, scale_tril=tf.linalg.cholesky(covar_m))
+        
         action_ = dist.sample()
-        # print(action_)
-        # print("PRETANH ACT: ", action_)
         # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
         action = tf.tanh(action_)
 
         # Calculate the log probability
         log_pi_ = dist.log_prob(action_)
-        # print(log_pi_.shape)
+
         # Change log probability to account for tanh squashing as mentioned in
         # Appendix C of the paper
-        # print("LOG",log_pi_.shape)
-        # print("SUM", tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1).shape)
         log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
-                                    -1)
-        # print(log_pi)
-        # print()
-        # print("LOG_PI: ", tf.reduce_mean(log_pi, axis = 0))
-        # print("ACTION: ", action)
+                                    -1)        
+        # log_pi = log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1,
+        #                                  keepdims=True)
+
         return action, log_pi
-
-    # @property
-    # def trainable_variables(self):
-    #     return self.dense1_layer.trainable_variables + \
-    #             self.dense2_layer.trainable_variables + \
-    #             self.mean_layer.trainable_variables + \
-    #             self.stdev_layer.trainable_variables
-
-##################################
-#Modified for TD advantage critic#
-##################################
 
 def get_critic():
     # State as input
@@ -380,8 +252,7 @@ def get_critic():
     action_input = layers.Input(shape=(num_actions))
     action_out = layers.Dense(32, activation="relu")(action_input)
 
-
-    # Both are passed through seperate layer before concatenating
+    # Concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
     out = layers.Dense(64, activation="relu")(concat)
@@ -393,43 +264,9 @@ def get_critic():
 
     return model
 
-
-
-# def policy(state, noise_object):
-#     # print(state.shape)
-#     e_greedy = False
-#     if np.random.rand() < epsilon:
-#         sampled_actions = np.random.randn(num_actions)
-#         e_greedy = True
-#         # print("RANDOM SAMPLED")
-#     else:
-#         sampled_actions = tf.squeeze(actor_model(state))
-#         # print("ACTOR MODEL")
-#     # print(sampled_actions.shape)
-#     noise = noise_object()
-#     # Adding noise to action
-#     if e_greedy:
-#         sampled_actions = sampled_actions + noise  
-#         # sampled_actions = sampled_actions 
-#     else:
-#         sampled_actions = sampled_actions.numpy() + noise  
-#         # sampled_actions = sampled_actions.numpy()
-
-#     # print("SAMPLED_ACTIONS: ", sampled_actions)
-
-#     # We make sure action is within bounds
-#     legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
-#     # print("BOUNDS: ", lower_bound, upper_bound)
-#     # print("LEGAL_ACTION:", legal_action)
-
-#     return [np.squeeze(legal_action)]
-
 ##########*****####################*****##########
 
 #################### GLOBAL SETUP P2 ####################
-
-# std_dev = 0.01
-# ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
 actor_model = Actor()
 critic_model_1 = get_critic()
@@ -441,11 +278,9 @@ alpha=tf.Variable(0.0, dtype=tf.float64)
 target_entropy = -np.prod(num_actions)
 
 # Making the weights equal initially
-# target_actor.set_weights(actor_model.get_weights())
-# target_critic_1.set_weights(critic_model_1.get_weights())
-# target_critic_2.set_weights(critic_model_2.get_weights())
+target_critic_1.set_weights(critic_model_1.get_weights())
+target_critic_2.set_weights(critic_model_2.get_weights())
 
-# Learning rate for actor-critic models
 
 lr = 0.0003
 
@@ -467,64 +302,6 @@ tau = 0.005
 BATCH_SIZE = 64
 buffer = Buffer(100000, BATCH_SIZE)
 
-# populate buffer with demo
-# demo_sample_count = 0
-
-# while demo_sample_count < buffer.buffer_capacity/5.0:
-#     print("Playing back random episode... (press ESC to quit)")
-
-#     # # select an episode randomly
-#     demo_ep = random.choice(demos)
-
-#     # read the model xml, using the metadata stored in the attribute for this episode
-#     model_xml = f["data/{}".format(demo_ep)].attrs["model_file"]
-
-#     demo_env.reset()
-#     xml = postprocess_model_xml(model_xml)
-#     demo_env.reset_from_xml_string(xml)
-#     demo_env.sim.reset()
-#     # env.viewer.set_camera(0)
-
-#     # load the flattened mujoco states
-#     demo_states = f["data/{}/states".format(demo_ep)][()]
-
-
-#     # load the initial state
-#     demo_env.sim.set_state_from_flattened(demo_states[0])
-#     demo_prev_state = None
-#     demo_env.sim.forward()
-
-#     # load the actions and play them back open-loop
-#     demo_actions = np.array(f["data/{}/actions".format(demo_ep)][()])
-#     demo_num_actions = demo_actions.shape[0]
-
-#     for j, action in enumerate(demo_actions):
-#         demo_state, demo_reward, demo_done, demo_info = demo_env.step(action)
-#         # print("DEMO ACTION, ", action)
-#         # print("DEMO REWARD, ", demo_reward)
-#         # demo_env.render()
-#         demo_state_reshaped = []
-
-#         for x in obs_keys:
-#             demo_state_reshaped.append(demo_state[x])
-
-#         demo_state = np.concatenate(np.array(demo_state_reshaped), axis = None)
-#         # print("STATE DIM, ", num_states)
-#         if not j == 0:
-#             buffer.record((demo_prev_state, action, demo_reward, demo_state))
-#             demo_sample_count += 1
-#             print("DEMO SAMPLE LOADED: ", demo_sample_count)
-
-#         demo_prev_state = demo_state
-
-#         if j < demo_num_actions - 1:
-#             # ensure that the actions deterministically lead to the same recorded states
-#             state_playback = demo_env.sim.get_state().flatten()
-#             if not np.all(np.equal(demo_states[j + 1], state_playback)):
-#                 err = np.linalg.norm(demo_states[j + 1] - state_playback)
-#                 print(f"[warning] playback diverged by {err:.2f} for ep {demo_ep} at step {j}")
-
-# f.close()
 
 # To store reward history of each episode
 eval_ep_reward_list = []
@@ -538,9 +315,6 @@ avg_reward_list = []
 
 #################### Training ####################
 
-# best_avg_reward = 0.0
-
-# epsilon = 0.99
 eval_flag = False
 ep = 0
 t_steps = 0
@@ -550,63 +324,26 @@ while t_steps < 1000000:
     if eval_flag:
         prev_state = env.reset()
 
-        # prev_state_reshaped = []
-
-        # for x in obs_keys:
-        #     prev_state_reshaped.append(prev_state[x])
-
-        # prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
-
         eval_episodic_reward = 0
 
         while True:
-            # Uncomment this to see the Actor in action
-            # But not in a python notebook.
             # env.render()
 
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
             sampled_actions, log_a= actor_model(tf_prev_state)
             sampled_actions =  sampled_actions[0]
-            # print("ACTION: ", action)
-            # print("BUFFER AVG REWARD: ", avg_reward)
-            # Recieve state and reward from environment.
-            state, reward, done, info = env.step(sampled_actions * upper_bound)
+
+            state, reward, done, info = env.step(sampled_actions*upper_bound)
 
             eval_episodic_reward += reward
-            # print("ACT/R: ", action, "/", reward)
-
-            # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
-            # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
-
-            # print(reward)
-            # state_reshaped = []
-
-            # for x in obs_keys:
-            #     state_reshaped.append(state[x])
-
-            # state = np.concatenate(np.array(state_reshaped), axis = None)
-
-            # if ep > total_episodes / 6.0:
-            # buffer.record((prev_state, action, reward, state))
-
-            # episodic_reward += reward
-
-            # print(epsilon)
-
-            # buffer.learn()
-            # update_target(target_actor.variables, actor_model.variables, tau)
-            # update_target(target_critic.variables, critic_model.variables, tau)
 
             # End this episode when `done` is True
             if done:
                 break
 
             prev_state = state
-            # step_index = step_index + 1
 
-
-        # print("TOTAL REWARD: ", eval_episodic_reward)
         eval_ep_reward_list.append(eval_episodic_reward)
         eval_avg_reward = np.mean(eval_ep_reward_list[-BATCH_SIZE:])
         eval_avg_reward_list.append(eval_avg_reward)
@@ -616,50 +353,23 @@ while t_steps < 1000000:
         eval_flag = False
 
     else:
-    # step_index = 1
-    # step_max = 5000
-    # avg_reward = np.mean(buffer.reward_buffer)
+
         prev_state = env.reset()
-
-        # prev_dist_to_goal = np.linalg.norm(prev_state['gripper_to_cube_pos'])
-
-        # prev_state_reshaped = []
-        # for x in obs_keys:
-        #     prev_state_reshaped.append(prev_state[x])
-
-        # prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
 
         episodic_reward = 0
 
         while True:
-            # Uncomment this to see the Actor in action
-            # But not in a python notebook.
             # env.render()
 
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
             action, log_a = actor_model(tf_prev_state)
-            # print("ACTION: ", action)
+
             action = action[0]
 
-            # print("ACTION: ", action)
-            # print("BUFFER AVG REWARD: ", avg_reward)
             # Recieve state and reward from environment.
-            state, reward, done, info = env.step(action)
-            # print("ACT/R: ", action, "/", reward)
+            state, reward, done, info = env.step(action*upper_bound)
 
-            # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
-            # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
-
-            # print(reward)
-            # state_reshaped = []
-
-            # for x in obs_keys:
-            #     state_reshaped.append(state[x])
-
-            # state = np.concatenate(np.array(state_reshaped), axis = None)
-
-            # if ep > total_episodes / 6.0:
             if done:
                 end = 0
             else:
@@ -669,10 +379,8 @@ while t_steps < 1000000:
 
             episodic_reward += reward
 
-            # print(epsilon)
-
             buffer.learn()
-            # update_target()
+
             update_target(target_critic_1.variables, critic_model_1.variables, tau)
             update_target(target_critic_2.variables, critic_model_2.variables, tau)
             t_steps += 1
@@ -682,26 +390,16 @@ while t_steps < 1000000:
                 break
 
             prev_state = state
-            # step_index = step_index + 1
 
         ep_reward_list.append(episodic_reward)
 
-        # Mean of last 40 episodes
+        # Mean of last BATCH_SIZE episodes
         avg_reward = np.mean(ep_reward_list[-BATCH_SIZE:])
         print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward), flush=True)
         ep = ep + 1
         print("TOTAL STEPS: ", t_steps, flush=True)
-        # if(avg_reward > best_avg_reward):        
-        #     actor_model.save_weights("weights/best_actor.h5")
-        #     critic_model.save_weights("weights/best_critic.h5")
 
-        #     target_actor.save_weights("weights/best_target_actor.h5")
-        #     target_critic.save_weights("weights/best_target_critic.h5")
-        #     best_avg_reward = avg_reward
         avg_reward_list.append(avg_reward)
-        # epsilon = np.exp((total_episodes - ep)/1000.0)/np.exp(total_episodes/1000.0)
-        # print("EPSILON: ", epsilon)
-
         #######################
         #   switch training   #
         #######################
@@ -712,10 +410,7 @@ plt.plot(avg_reward_list)
 plt.xlabel("Episode")
 plt.ylabel("Avg. Epsiodic Reward, train")
 plt.show()
-# plt.plot(eval_avg_reward_list)
-# plt.xlabel("Episode")
-# plt.ylabel("Avg. Epsiodic Reward, eval")
-# plt.show()
+
 ##########*****####################*****##########
 
 # actor_model.save_weights("weights/custom_sac_actor_final.h5")
