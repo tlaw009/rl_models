@@ -464,8 +464,8 @@ total_episodes = 5000
 gamma = 0.99
 # Used to update target networks
 tau = 0.005
-
-buffer = Buffer(100000, 64)
+BATCH_SIZE = 64
+buffer = Buffer(100000, BATCH_SIZE)
 
 # populate buffer with demo
 # demo_sample_count = 0
@@ -608,7 +608,7 @@ while t_steps < 1000000:
 
         # print("TOTAL REWARD: ", eval_episodic_reward)
         eval_ep_reward_list.append(eval_episodic_reward)
-        eval_avg_reward = np.mean(eval_ep_reward_list)
+        eval_avg_reward = np.mean(eval_ep_reward_list[-BATCH_SIZE:])
         eval_avg_reward_list.append(eval_avg_reward)
 
         print("Episode * {} * Avg eval Reward is ==> {}".format(ep-1, eval_avg_reward), flush=True)
@@ -687,7 +687,7 @@ while t_steps < 1000000:
         ep_reward_list.append(episodic_reward)
 
         # Mean of last 40 episodes
-        avg_reward = np.mean(ep_reward_list)
+        avg_reward = np.mean(ep_reward_list[-BATCH_SIZE:])
         print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward), flush=True)
         ep = ep + 1
         print("TOTAL STEPS: ", t_steps, flush=True)
