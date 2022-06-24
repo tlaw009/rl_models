@@ -23,6 +23,7 @@ EPSILON = 1e-16
 
 problem = "Hopper-v2"
 env = gym.make(problem)
+eval_env = gym.make(problem)
 
 num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states), flush=True)
@@ -150,7 +151,7 @@ class Buffer:
             q1 = critic_model_1([state_batch, pi_a])
             q2 = critic_model_2([state_batch, pi_a])
 
-            soft_q = tf.math.minimum(q1, q2)
+            soft_q = tf.reduce_mean([q1, q2], axis = 0)
 
             actor_losses = tf.math.add(tf.math.multiply(alpha,log_pi_a), -soft_q)
             actor_loss = tf.nn.compute_average_loss(actor_losses)
@@ -205,8 +206,8 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.dense1_layer = layers.Dense(64, activation="relu")
-        self.dense2_layer = layers.Dense(64, activation="relu")
+        self.dense1_layer = layers.Dense(256, activation="relu")
+        self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
         self.stdev_layer = layers.Dense(self.action_dim)
 
@@ -245,18 +246,17 @@ class Actor(Model):
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_out = layers.Dense(32, activation="relu")(state_input)
+    state_out = layers.Dense(128, activation="relu")(state_input)
     # state_out = layers.Dense(32, activation="relu")(state_out)
 
     # Action as input
     action_input = layers.Input(shape=(num_actions))
-    action_out = layers.Dense(32, activation="relu")(action_input)
+    action_out = layers.Dense(128, activation="relu")(action_input)
 
     # Concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
-    out = layers.Dense(64, activation="relu")(concat)
-    out = layers.Dense(64, activation="relu")(out)
+    out = layers.Dense(256, activation="relu")(concat)
     outputs = layers.Dense(1, dtype='float64')(out)
 
     # Outputs single value for give state-action
@@ -299,7 +299,7 @@ total_episodes = 5000
 gamma = 0.99
 # Used to update target networks
 tau = 0.005
-BATCH_SIZE = 64
+BATCH_SIZE = 256
 buffer = Buffer(100000, BATCH_SIZE)
 
 
@@ -307,7 +307,6 @@ buffer = Buffer(100000, BATCH_SIZE)
 eval_ep_reward_list = []
 eval_avg_reward_list = []
 ep_reward_list = []
-# To store average reward history of last few episodes
 avg_reward_list = []
 
 ##########*****####################*****##########
@@ -315,98 +314,89 @@ avg_reward_list = []
 
 #################### Training ####################
 
-eval_flag = False
 ep = 0
 t_steps = 0
+RO_SIZE=1000 
+RO_index = 0
 
 while t_steps < 1000000:
 
-    if eval_flag:
-        prev_state = env.reset()
+    prev_state = env.reset()
 
-        eval_episodic_reward = 0
+    episodic_reward = 0
 
-        while True:
-            # env.render()
+    while True:
+        # env.render()
 
-            tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
+        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
-            sampled_actions, log_a= actor_model(tf_prev_state)
-            sampled_actions =  sampled_actions[0]
+        action, log_a = actor_model(tf_prev_state)
 
-            state, reward, done, info = env.step(sampled_actions*upper_bound)
+        action = action[0]
 
-            eval_episodic_reward += reward
+        # Recieve state and reward from environment.
+        state, reward, done, info = env.step(action*upper_bound)
 
-            # End this episode when `done` is True
-            if done:
-                break
+        if done:
+            end = 0
+        else:
+            end = 1
 
-            prev_state = state
+        buffer.record((prev_state, action, reward, state, end))
 
-        eval_ep_reward_list.append(eval_episodic_reward)
-        eval_avg_reward = np.mean(eval_ep_reward_list[-BATCH_SIZE:])
-        eval_avg_reward_list.append(eval_avg_reward)
+        episodic_reward += reward
 
-        print("Episode * {} * Avg eval Reward is ==> {}".format(ep-1, eval_avg_reward), flush=True)
+        buffer.learn()
 
-        eval_flag = False
+        update_target(target_critic_1.variables, critic_model_1.variables, tau)
+        update_target(target_critic_2.variables, critic_model_2.variables, tau)
+        t_steps += 1
 
-    else:
+        if t_steps%RO_SIZE == 0:
 
-        prev_state = env.reset()
+            eval_prev_state = eval_env.reset()
 
-        episodic_reward = 0
+            eval_ep_reward = 0
 
-        while True:
-            # env.render()
+            while True:
+                # env.render()
 
-            tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
+                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
 
-            action, log_a = actor_model(tf_prev_state)
+                eval_action, eval_log_a = actor_model(eval_tf_prev_state)
 
-            action = action[0]
+                eval_action = eval_action[0]
 
-            # Recieve state and reward from environment.
-            state, reward, done, info = env.step(action*upper_bound)
+                # Recieve state and reward from environment.
+                eval_state, eval_reward, eval_done, info = eval_env.step(eval_action*upper_bound)
 
-            if done:
-                end = 0
-            else:
-                end = 1
+                eval_ep_reward += eval_reward
 
-            buffer.record((prev_state, action, reward, state, end))
+                if eval_done:
+                    break
 
-            episodic_reward += reward
+                eval_prev_state = eval_state
 
-            buffer.learn()
+            eval_ep_reward_list.append(eval_ep_reward)
+            eval_avg_reward = np.mean(eval_ep_reward_list)
+            print("Rollout * {} * Avg Reward is ==> {}".format(RO_index, eval_avg_reward), flush=True)
+            print("TOTAL STEPS: ", t_steps, flush=True)
+            eval_avg_reward_list.append(eval_avg_reward)
+            RO_index += 1 
 
-            update_target(target_critic_1.variables, critic_model_1.variables, tau)
-            update_target(target_critic_2.variables, critic_model_2.variables, tau)
-            t_steps += 1
+        # End this episode when `done` is True
+        if done:
+            break
 
-            # End this episode when `done` is True
-            if done:
-                break
+        prev_state = state
 
-            prev_state = state
+    ep_reward_list.append(episodic_reward)
 
-        ep_reward_list.append(episodic_reward)
+    ep = ep + 1
 
-        # Mean of last BATCH_SIZE episodes
-        avg_reward = np.mean(ep_reward_list[-BATCH_SIZE:])
-        print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward), flush=True)
-        ep = ep + 1
-        print("TOTAL STEPS: ", t_steps, flush=True)
-
-        avg_reward_list.append(avg_reward)
-        #######################
-        #   switch training   #
-        #######################
-        eval_flag = False
 # Plotting graph
 # Episodes versus Avg. Rewards
-plt.plot(avg_reward_list)
+plt.plot(eval_avg_reward_list)
 plt.xlabel("Episode")
 plt.ylabel("Avg. Epsiodic Reward, train")
 plt.show()
