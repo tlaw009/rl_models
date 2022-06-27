@@ -90,7 +90,6 @@ class Buffer:
         with tf.GradientTape() as tape1:
             # Get Q value estimates, action used here is from the replay buffer
             q1 = critic_model_1([state_batch, action_batch])
-
             # Sample actions from the policy for next states
             pi_a, log_pi_a = actor_model(next_state_batch)
 
@@ -106,7 +105,6 @@ class Buffer:
             soft_q_target = min_q_target - alpha * log_pi_a
 
             y = tf.stop_gradient(reward_batch + gamma * done_batch * soft_q_target)
-
             critic1_losses = 0.5 * (
                     tf.losses.MSE(y_true=y, y_pred=q1))
             critic1_loss = tf.nn.compute_average_loss(critic1_losses)
@@ -114,7 +112,6 @@ class Buffer:
         with tf.GradientTape() as tape2:
             # Get Q value estimates, action used here is from the replay buffer
             q2 = critic_model_2([state_batch, action_batch])
-
             # Sample actions from the policy for next states
             pi_a, log_pi_a = actor_model(next_state_batch)
 
@@ -130,7 +127,6 @@ class Buffer:
             soft_q_target = min_q_target - alpha * log_pi_a
 
             y = tf.stop_gradient(reward_batch + gamma * done_batch * soft_q_target)
-
             critic2_losses = 0.5 * (
                     tf.losses.MSE(y_true=y, y_pred=q2))
             critic2_loss = tf.nn.compute_average_loss(critic2_losses)
@@ -151,7 +147,7 @@ class Buffer:
             q1 = critic_model_1([state_batch, pi_a])
             q2 = critic_model_2([state_batch, pi_a])
 
-            soft_q = tf.reduce_mean([q1, q2], axis = 0)
+            soft_q = tf.math.minimum(q1, q2)
 
             actor_losses = tf.math.add(tf.math.multiply(alpha,log_pi_a), -soft_q)
             actor_loss = tf.nn.compute_average_loss(actor_losses)
@@ -211,7 +207,7 @@ class Actor(Model):
         self.mean_layer = layers.Dense(self.action_dim)
         self.stdev_layer = layers.Dense(self.action_dim)
 
-    def call(self, state):
+    def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
         a1 = self.dense1_layer(state)
         a2 = self.dense2_layer(a1)
@@ -226,22 +222,25 @@ class Actor(Model):
 
         # dist = tfp.distributions.Normal(mu, sigma)
         dist = tfp.distributions.MultivariateNormalTriL(loc=mu, scale_tril=tf.linalg.cholesky(covar_m))
-        
-        action_ = dist.sample()
-        # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
-        action = tf.tanh(action_)
+        if eval_mode:
+            action = tf.tanh(mu)
+            log_pi = tf.constant(0, dtype='float64')
+        else:
+            action_ = dist.sample()
+            # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
+            action = tf.tanh(action_)
 
-        # Calculate the log probability
-        log_pi_ = dist.log_prob(action_)
+            # Calculate the log probability
+            log_pi_ = dist.log_prob(action_)
 
-        # Change log probability to account for tanh squashing as mentioned in
-        # Appendix C of the paper
-        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
-                                    -1)        
-        # log_pi = log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1,
-        #                                  keepdims=True)
+            # Change log probability to account for tanh squashing as mentioned in
+            # Appendix C of the paper
+            log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
+                                        -1)        
+            # log_pi = log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1,
+            #                                  keepdims=True)
 
-        return action, log_pi
+        return action*upper_bound, log_pi
 
 def get_critic():
     # State as input
@@ -335,7 +334,7 @@ while t_steps < 1000000:
         action = action[0]
 
         # Recieve state and reward from environment.
-        state, reward, done, info = env.step(action*upper_bound)
+        state, reward, done, info = env.step(action)
 
         if done:
             end = 0
@@ -363,12 +362,12 @@ while t_steps < 1000000:
 
                 eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
 
-                eval_action, eval_log_a = actor_model(eval_tf_prev_state)
+                eval_action, eval_log_a = actor_model(eval_tf_prev_state, eval_mode=True)
 
                 eval_action = eval_action[0]
 
                 # Recieve state and reward from environment.
-                eval_state, eval_reward, eval_done, info = eval_env.step(eval_action*upper_bound)
+                eval_state, eval_reward, eval_done, info = eval_env.step(eval_action)
 
                 eval_ep_reward += eval_reward
 
