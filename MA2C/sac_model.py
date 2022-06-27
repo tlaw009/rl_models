@@ -4,10 +4,6 @@ from tensorflow.keras import layers
 from tensorflow.keras import Model
 import numpy as np
 import matplotlib.pyplot as plt
-import robosuite as suite
-from robosuite import load_controller_config
-import h5py
-from robosuite.utils.mjcf_utils import postprocess_model_xml
 import os
 import json
 import random
@@ -147,7 +143,7 @@ class Buffer:
             q1 = critic_model_1([state_batch, pi_a])
             q2 = critic_model_2([state_batch, pi_a])
 
-            soft_q = tf.math.minimum(q1, q2)
+            soft_q = tf.reduce_mean([q1, q2], axis = 0)
 
             actor_losses = tf.math.add(tf.math.multiply(alpha,log_pi_a), -soft_q)
             actor_loss = tf.nn.compute_average_loss(actor_losses)
