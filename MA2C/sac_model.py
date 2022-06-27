@@ -237,8 +237,6 @@ class Actor(Model):
             # Appendix C of the paper
             log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
                                         -1)        
-            # log_pi = log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1,
-            #                                  keepdims=True)
 
         return action*upper_bound, log_pi
 
