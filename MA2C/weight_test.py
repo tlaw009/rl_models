@@ -55,7 +55,6 @@ def get_actor():
     last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
 
     inputs = layers.Input(shape=(num_states,))
-    # out = layers.Flatten()(inputs)
     out = layers.Dense(64, activation="tanh")(inputs)
     out = layers.Dense(64, activation="tanh")(out)
     outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
@@ -92,18 +91,11 @@ for ep in range(total_episodes):
         tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
         sampled_actions = np.squeeze(tf.squeeze(trained_actor(tf_prev_state)))
-        # print("ACTION: ", action)
-        # print("BUFFER AVG REWARD: ", avg_reward)
         # Recieve state and reward from environment.
         state, reward, done, info = env.step(sampled_actions)
 
         episodic_reward += reward
-        # print("ACT/R: ", action, "/", reward)
 
-        # reward = reward + (prev_dist_to_goal - np.linalg.norm(state['gripper_to_cube_pos']))
-        # prev_dist_to_goal = np.linalg.norm(state['gripper_to_cube_pos'])
-
-        # print(reward)
         state_reshaped = []
 
         for x in obs_keys:
@@ -111,22 +103,10 @@ for ep in range(total_episodes):
 
         state = np.concatenate(np.array(state_reshaped), axis = None)
 
-        # if ep > total_episodes / 6.0:
-        # buffer.record((prev_state, action, reward, state))
-
-        # episodic_reward += reward
-
-        # print(epsilon)
-
-        # buffer.learn()
-        # update_target(target_actor.variables, actor_model.variables, tau)
-        # update_target(target_critic.variables, critic_model.variables, tau)
-
         # End this episode when `done` is True
         if done:
             break
 
         prev_state = state
-        # step_index = step_index + 1
 
     print("TOTAL REWARD: ", episodic_reward)
