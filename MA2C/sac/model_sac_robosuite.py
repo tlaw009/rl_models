@@ -9,6 +9,10 @@ import json
 import random
 import tensorflow_probability as tfp
 from tensorflow.keras import regularizers
+import robosuite as suite
+from robosuite import load_controller_config
+from robosuite.utils.mjcf_utils import postprocess_model_xml
+
 
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
@@ -17,17 +21,48 @@ EPSILON = 1e-16
 
 ################## GLOBAL SETUP P1 ##################
 
-problem = "Hopper-v2"
-env = gym.make(problem)
-eval_env = gym.make(problem)
+config = load_controller_config(default_controller="OSC_POSE")
 
-num_states = env.observation_space.shape[0]
+obs_keys = ['robot0_joint_pos_cos', 'robot0_joint_pos_sin', 'robot0_joint_vel',
+                 'robot0_eef_pos', 'robot0_eef_quat', 'robot0_gripper_qpos', 'robot0_gripper_qvel', 'object-state',
+                 'robot0_proprio-state', 'gripper_to_cube_pos', 'cube_quat', 'cube_pos']
+
+env = suite.make(
+    env_name="Lift", # try with other tasks like "Stack" and "Door"
+    robots="Panda",  # try with other robots like "Sawyer" and "Jaco"
+    controller_configs=config,
+    has_renderer=False,
+    ignore_done=False,
+    has_offscreen_renderer=False,
+    reward_shaping=True,
+    use_camera_obs=False,
+)
+
+eval_env = suite.make(
+    env_name="Lift", # try with other tasks like "Stack" and "Door"
+    robots="Panda",  # try with other robots like "Sawyer" and "Jaco"
+    controller_configs=config,
+    has_renderer=False,
+    ignore_done=False,
+    has_offscreen_renderer=False,
+    reward_shaping=True,
+    use_camera_obs=False,
+)
+
+obs_dim = []
+for x in obs_keys:
+    obs_dim.append(env.observation_spec()[x].shape[0])
+
+state_dim = np.sum(obs_dim, dtype=np.int32)
+
+
+num_states = state_dim.item()
 print("Size of State Space ->  {}".format(num_states), flush=True)
-num_actions = env.action_space.shape[0]
+num_actions = env.action_dim
 print("Size of Action Space ->  {}".format(num_actions), flush=True)
 
-upper_bound = env.action_space.high[0]
-lower_bound = env.action_space.low[0]
+upper_bound = env.action_spec[1][0]
+lower_bound = env.action_spec[0][0]
 
 print("Max Value of Action ->  {}".format(upper_bound), flush=True)
 print("Min Value of Action ->  {}".format(lower_bound), flush=True)
@@ -316,6 +351,12 @@ while t_steps < 1000000:
 
     prev_state = env.reset()
 
+    prev_state_reshaped = []
+    for x in obs_keys:
+        prev_state_reshaped.append(prev_state[x])
+
+    prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
+
     episodic_reward = 0
 
     while True:
@@ -329,6 +370,13 @@ while t_steps < 1000000:
 
         # Recieve state and reward from environment.
         state, reward, done, info = env.step(action)
+
+        state_reshaped = []
+
+        for x in obs_keys:
+            state_reshaped.append(state[x])
+
+        state = np.concatenate(np.array(state_reshaped), axis = None)
 
         if done:
             end = 0
@@ -349,6 +397,12 @@ while t_steps < 1000000:
 
             eval_prev_state = eval_env.reset()
 
+            eval_prev_state_reshaped = []
+            for x in obs_keys:
+                eval_prev_state_reshaped.append(eval_prev_state[x])
+
+            eval_prev_state = np.concatenate(np.array(eval_prev_state_reshaped), axis = None)
+
             eval_ep_reward = 0
 
             while True:
@@ -362,6 +416,13 @@ while t_steps < 1000000:
 
                 # Recieve state and reward from environment.
                 eval_state, eval_reward, eval_done, info = eval_env.step(eval_action)
+
+                eval_state_reshaped = []
+
+                for x in obs_keys:
+                    eval_state_reshaped.append(eval_state[x])
+
+                eval_state = np.concatenate(np.array(eval_state_reshaped), axis = None)
 
                 eval_ep_reward += eval_reward
 
