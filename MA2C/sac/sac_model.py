@@ -17,7 +17,7 @@ EPSILON = 1e-16
 
 ################## GLOBAL SETUP P1 ##################
 
-problem = "Hopper-v2"
+problem = "Humanoid-v2"
 env = gym.make(problem)
 eval_env = gym.make(problem)
 
