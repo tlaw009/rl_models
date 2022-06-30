@@ -234,7 +234,7 @@ class Actor(Model):
             log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
                                         -1)        
 
-        return action*upper_bound, log_pi
+        return action, log_pi
 
 def get_critic():
     # State as input
@@ -328,7 +328,7 @@ while t_steps < 1000000:
         action = action[0]
 
         # Recieve state and reward from environment.
-        state, reward, done, info = env.step(action)
+        state, reward, done, info = env.step(action*upper_bound)
 
         if done:
             end = 0
@@ -361,7 +361,7 @@ while t_steps < 1000000:
                 eval_action = eval_action[0]
 
                 # Recieve state and reward from environment.
-                eval_state, eval_reward, eval_done, info = eval_env.step(eval_action)
+                eval_state, eval_reward, eval_done, info = eval_env.step(eval_action*upper_bound)
 
                 eval_ep_reward += eval_reward
 
