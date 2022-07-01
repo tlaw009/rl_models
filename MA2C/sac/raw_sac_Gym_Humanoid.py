@@ -199,7 +199,6 @@ class Actor(Model):
         super().__init__()
         self.action_dim = num_actions
         self.norm1_layer = layers.LayerNormalization()
-        self.norm2_layer = layers.LayerNormalization()
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
@@ -210,7 +209,6 @@ class Actor(Model):
         a1 = self.dense1_layer(state)
         a1 = self.norm1_layer(a1)
         a2 = self.dense2_layer(a1)
-        a2 = self.norm2_layer(a2)
         mu = self.mean_layer(a2)
 
         # Standard deviation is bounded by a constraint of being non-negative
@@ -254,7 +252,6 @@ def get_critic():
     concat = layers.Concatenate()([state_out, action_out])
     concat = layers.LayerNormalization()(concat)
     out = layers.Dense(256, activation="relu")(concat)
-    out = layers.LayerNormalization()(out)
     outputs = layers.Dense(1, dtype='float64')(out)
 
     # Outputs single value for give state-action
