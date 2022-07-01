@@ -198,7 +198,8 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.norm_layer = layers.LayerNormalization()
+        self.norm1_layer = layers.LayerNormalization()
+        self.norm2_layer = layers.LayerNormalization()
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
@@ -207,9 +208,9 @@ class Actor(Model):
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
         a1 = self.dense1_layer(state)
-        a1 = self.norm_layer(a1)
+        a1 = self.norm1_layer(a1)
         a2 = self.dense2_layer(a1)
-        a2 = self.norm_layer(a2)
+        a2 = self.norm2_layer(a2)
         mu = self.mean_layer(a2)
 
         # Standard deviation is bounded by a constraint of being non-negative
