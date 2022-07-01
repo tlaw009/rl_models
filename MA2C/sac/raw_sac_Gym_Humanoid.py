@@ -206,9 +206,10 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        n_state = self.norm_layer(state)
-        a1 = self.dense1_layer(n_state)
+        a1 = self.dense1_layer(state)
+        a1 = self.norm_layer(a1)
         a2 = self.dense2_layer(a1)
+        a2 = self.norm_layer(a2)
         mu = self.mean_layer(a2)
 
         # Standard deviation is bounded by a constraint of being non-negative
@@ -241,8 +242,7 @@ class Actor(Model):
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    n_state_input = layers.LayerNormalization()(state_input)
-    state_out = layers.Dense(128, activation="relu")(n_state_input)
+    state_out = layers.Dense(128, activation="relu")(state_input)
     # state_out = layers.Dense(32, activation="relu")(state_out)
 
     # Action as input
@@ -251,8 +251,9 @@ def get_critic():
 
     # Concatenating
     concat = layers.Concatenate()([state_out, action_out])
-
+    concat = layers.LayerNormalization()(concat)
     out = layers.Dense(256, activation="relu")(concat)
+    out = layers.LayerNormalization()(out)
     outputs = layers.Dense(1, dtype='float64')(out)
 
     # Outputs single value for give state-action
