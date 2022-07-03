@@ -373,7 +373,7 @@ while t_steps < 1000000:
                 eval_prev_state = eval_state
 
             eval_ep_reward_list.append(eval_ep_reward)
-            eval_avg_reward = np.mean(eval_ep_reward_list[-50:])
+            eval_avg_reward = np.mean(eval_ep_reward_list[])
             print("Rollout * {} * Avg Reward is ==> {}".format(RO_index, eval_avg_reward), flush=True)
             print("Rollout * {} * Epsiodic Reward is ==> {}".format(RO_index, eval_ep_reward), flush=True)
             print("TOTAL STEPS: ", t_steps, flush=True)
