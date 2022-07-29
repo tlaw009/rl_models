@@ -87,14 +87,14 @@ class OUActionNoise:
 ###########################
 #Observation normalization#
 ###########################
-obs_init = env.observation_space.sample()
+obs_init = env.reset()
 obs_init_reshaped = []
 for x in obs_keys:
     obs_init_reshaped.append(obs_init[x])
 obs_init = np.concatenate(np.array(obs_init_reshaped), axis = None)
 
 while 0 in obs_init:
-    obs_init = env.observation_space.sample()
+    obs_init = env.reset()
     obs_init_reshaped = []
     for x in obs_keys:
         obs_init_reshaped.append(obs_init[x])
