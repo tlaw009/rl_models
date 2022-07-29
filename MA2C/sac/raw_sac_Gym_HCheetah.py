@@ -353,7 +353,7 @@ while t_steps < 3000000:
             eval_ep_reward = 0
 
             while True:
-                # env.render()
+                # eval_env.render()
 
                 eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
 
