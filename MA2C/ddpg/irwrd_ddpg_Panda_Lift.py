@@ -87,29 +87,11 @@ class OUActionNoise:
 ###########################
 #Observation normalization#
 ###########################
-obs_init = env.reset()
-obs_init_reshaped = []
-for x in obs_keys:
-    obs_init_reshaped.append(obs_init[x])
-obs_init = np.concatenate(np.array(obs_init_reshaped), axis = None)
-
-while 0 in obs_init:
-    obs_init = env.reset()
-    obs_init_reshaped = []
-    for x in obs_keys:
-        obs_init_reshaped.append(obs_init[x])
-    obs_init = np.concatenate(np.array(obs_init_reshaped), axis = None)
 
 print("State Normalization Initialized", flush=True)
 
 obs_upper = np.zeros(num_states)
 obs_lower = np.zeros(num_states)
-
-for i in range(num_states):
-    if obs_init[i] > 0:
-        obs_upper[i] =  obs_init[i]
-    elif obs_init[i] < 0:
-        obs_lower[i] = obs_init[i]
 
 def obs_norm(state):
     norm_state = np.zeros(num_states)
