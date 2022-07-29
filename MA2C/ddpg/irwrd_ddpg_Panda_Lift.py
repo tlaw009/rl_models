@@ -84,6 +84,43 @@ class OUActionNoise:
         else:
             self.x_prev = np.zeros_like(self.mean)
 
+###########################
+#Observation normalization#
+###########################
+obs_init = env.observation_space.sample()
+obs_init_reshaped = []
+for x in obs_keys:
+    obs_init_reshaped.append(obs_init[x])
+obs_init = np.concatenate(np.array(obs_init_reshaped), axis = None)
+
+while 0 in obs_init:
+    obs_init = env.observation_space.sample()
+    obs_init_reshaped = []
+    for x in obs_keys:
+        obs_init_reshaped.append(obs_init[x])
+    obs_init = np.concatenate(np.array(obs_init_reshaped), axis = None)
+
+print("State Normalization Initialized", flush=True)
+
+obs_upper = np.zeros(num_states)
+obs_lower = np.zeros(num_states)
+
+for i in range(num_states):
+    if obs_init[i] > 0:
+        obs_upper[i] =  obs_init[i]
+    elif obs_init[i] < 0:
+        obs_lower[i] = obs_init[i]
+
+def obs_norm(state):
+    norm_state = np.zeros(num_states)
+    for i in range(num_states):
+        if state[i] > obs_upper[i]:
+            obs_upper[i] =  state[i]
+        if state[i] < obs_lower[i]:
+            obs_lower[i] = state[i]
+        norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i])
+        
+    return norm_state
 ##########*****####################*****##########
 
 
@@ -185,7 +222,6 @@ def get_actor():
 
     inputs = layers.Input(shape=(num_states,))
     out = layers.Dense(256, activation="relu")(inputs)
-    out = layers.LayerNormalization()(out)
     out = layers.Dense(256, activation="relu")(out)
     outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
 
@@ -210,7 +246,6 @@ def get_critic():
 
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
-    concat = layers.LayerNormalization()(concat)
     out = layers.Dense(256, activation="relu")(concat)
     outputs = layers.Dense(1)(out)
 
@@ -310,6 +345,7 @@ while ep < total_episodes:
             prev_state_reshaped.append(prev_state[x])
 
         prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
+        prev_state = obs_norm(prev_state)
 
         eval_episodic_reward = 0
 
@@ -333,6 +369,7 @@ while ep < total_episodes:
                 state_reshaped.append(state[x])
 
             state = np.concatenate(np.array(state_reshaped), axis = None)
+            state = obs_norm(state)
 
             # End this episode when `done` is True
             if done:
@@ -356,6 +393,7 @@ while ep < total_episodes:
             prev_state_reshaped.append(prev_state[x])
 
         prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
+        prev_state = obs_norm(prev_state)
 
         episodic_reward = 0
 
@@ -377,6 +415,7 @@ while ep < total_episodes:
                 state_reshaped.append(state[x])
 
             state = np.concatenate(np.array(state_reshaped), axis = None)
+            state = obs_norm(state)
 
             buffer.record((prev_state, action, reward, state))
 
