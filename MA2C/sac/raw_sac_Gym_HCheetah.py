@@ -37,10 +37,34 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
 #################### Auxiliaries ####################
 
-###################
-#Missing Fun Stuff#
-###################
+###########################
+#Observation normalization#
+###########################
+obs_init = env.observation_space.sample()
+while 0 in obs_init:
+    obs_init = env.observation_space.sample()
 
+print("State Normalization Initialized", flush=True)
+
+obs_upper = np.zeros(num_states)
+obs_lower = np.zeros(num_states)
+
+for i in range(num_states):
+    if obs_init[i] > 0:
+        obs_upper[i] =  obs_init[i]
+    elif obs_init[i] < 0:
+        obs_lower[i] = obs_init[i]
+
+def obs_norm(state):
+    norm_state = np.zeros(num_states)
+    for i in range(num_states):
+        if state[i] > obs_upper[i]:
+            obs_upper[i] =  state[i]
+        if state[i] < obs_lower[i]:
+            obs_lower[i] = state[i]
+        norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i])
+        
+    return norm_state
 ##########*****####################*****##########
 
 
@@ -198,7 +222,6 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.norm1_layer = layers.LayerNormalization()
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
@@ -206,7 +229,6 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        state = self.norm1_layer(state)
         a1 = self.dense1_layer(state)
         a2 = self.dense2_layer(a1)
         mu = self.mean_layer(a2)
@@ -316,6 +338,7 @@ RO_index = 0
 while t_steps < 3000000:
 
     prev_state = env.reset()
+    prev_state = obs_norm(prev_state)
 
     episodic_reward = 0
 
@@ -330,6 +353,7 @@ while t_steps < 3000000:
 
         # Recieve state and reward from environment.
         state, reward, done, info = env.step(action*upper_bound)
+        state = obs_norm(state)
 
         if done:
             end = 0
@@ -349,11 +373,12 @@ while t_steps < 3000000:
         if t_steps%RO_SIZE == 0:
 
             eval_prev_state = eval_env.reset()
+            eval_prev_state = obs_norm(eval_prev_state)
 
             eval_ep_reward = 0
 
             while True:
-                eval_env.render()
+                # eval_env.render()
 
                 eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
 
@@ -363,6 +388,7 @@ while t_steps < 3000000:
 
                 # Recieve state and reward from environment.
                 eval_state, eval_reward, eval_done, info = eval_env.step(eval_action*upper_bound)
+                eval_state = obs_norm(eval_state)
 
                 eval_ep_reward += eval_reward
 
