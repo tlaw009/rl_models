@@ -66,24 +66,28 @@ class OUActionNoise:
 #Observation normalization#
 ###########################
 
-sample_count = 0
 running_shift = np.zeros(num_states)
 running_scale = np.ones(num_states)
-var_sum = np.zeros(num_states)
+running_momentum = 0.9
+init_period = 256 # should be consistent with batch size
+var_batch = np.zeros([init_period, num_states])
+sample_index = 0
 
 def obs_norm(state):
-    global sample_count
+    global sample_index
 
     norm_state = np.zeros(num_states)
-    sample_count += 1
+    var_batch[sample_index] = state
+    sample_index = (sample_index + 1)%init_period
 
     for i in range(num_states):
-        running_shift[i] = (running_shift[i]* (sample_count-1) + state[i])/sample_count
-        var_sum[i] += (state[i] - running_shift[i])**2
-        if sample_count > 1:
-            running_scale[i] = var_sum[i]/(sample_count-1)
-        norm_state[i] = (state[i]-running_shift[i])/np.sqrt(running_scale[i]+EPSILON)
+        running_shift[i] = running_shift[i]* running_momentum + state[i]* (1-running_momentum)
+        if len(var_batch) >= init_period:
+            if not state[i] == running_shift[i]:
+                running_scale[i] = running_scale[i]* running_momentum + np.var(var_batch, axis=0)[i]* (1-running_momentum)
 
+        norm_state[i] = (state[i]-running_shift[i])/np.sqrt(running_scale[i]+EPSILON)
+        
     return norm_state
 
 print("State Normalization Initialized", flush=True)

@@ -85,32 +85,6 @@ class OUActionNoise:
         else:
             self.x_prev = np.zeros_like(self.mean)
 
-###########################
-#Observation normalization#
-###########################
-
-sample_count = 0
-running_shift = np.zeros(num_states)
-running_scale = np.ones(num_states)
-var_sum = np.zeros(num_states)
-
-def obs_norm(state):
-    global sample_count
-
-    norm_state = np.zeros(num_states)
-    sample_count += 1
-
-    for i in range(num_states):
-        running_shift[i] = (running_shift[i]* (sample_count-1) + state[i])/sample_count
-        var_sum[i] += (state[i] - running_shift[i])**2
-        if sample_count > 1:
-            running_scale[i] = var_sum[i]/(sample_count-1)
-        norm_state[i] = (state[i]-running_shift[i])/np.sqrt(running_scale[i]+EPSILON)
-
-    return norm_state
-
-print("State Normalization Initialized", flush=True)
-
 ##########*****####################*****##########
 
 
@@ -330,7 +304,6 @@ while ep < total_episodes:
             prev_state_reshaped.append(prev_state[x])
 
         prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
-        prev_state = obs_norm(prev_state)
 
         eval_episodic_reward = 0
 
@@ -354,7 +327,6 @@ while ep < total_episodes:
                 state_reshaped.append(state[x])
 
             state = np.concatenate(np.array(state_reshaped), axis = None)
-            state = obs_norm(state)
 
             # End this episode when `done` is True
             if done:
@@ -380,7 +352,6 @@ while ep < total_episodes:
             prev_state_reshaped.append(prev_state[x])
 
         prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
-        prev_state = obs_norm(prev_state)
 
         while True:
             # Uncomment this to see the Actor in action
@@ -400,7 +371,6 @@ while ep < total_episodes:
                 state_reshaped.append(state[x])
 
             state = np.concatenate(np.array(state_reshaped), axis = None)
-            state = obs_norm(state)
 
             buffer.record((prev_state, action, reward, state))
 

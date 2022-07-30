@@ -76,32 +76,6 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
 #################### Auxiliaries ####################
 
-###########################
-#Observation normalization#
-###########################
-
-sample_count = 0
-running_shift = np.zeros(num_states)
-running_scale = np.ones(num_states)
-var_sum = np.zeros(num_states)
-
-def obs_norm(state):
-    global sample_count
-
-    norm_state = np.zeros(num_states)
-    sample_count += 1
-
-    for i in range(num_states):
-        running_shift[i] = (running_shift[i]* (sample_count-1) + state[i])/sample_count
-        var_sum[i] += (state[i] - running_shift[i])**2
-        if sample_count > 1:
-            running_scale[i] = var_sum[i]/(sample_count-1)
-        norm_state[i] = (state[i]-running_shift[i])/np.sqrt(running_scale[i]+EPSILON)
-
-    return norm_state
-
-print("State Normalization Initialized", flush=True)
-
 ##########*****####################*****##########
 
 
@@ -381,7 +355,6 @@ while t_steps < 1000000:
         prev_state_reshaped.append(prev_state[x])
 
     prev_state = np.concatenate(np.array(prev_state_reshaped), axis = None)
-    prev_state = obs_norm(prev_state)
 
     episodic_reward = 0
 
@@ -403,7 +376,6 @@ while t_steps < 1000000:
             state_reshaped.append(state[x])
 
         state = np.concatenate(np.array(state_reshaped), axis = None)
-        state = obs_norm(state)
 
         if done:
             end = 0
@@ -429,7 +401,6 @@ while t_steps < 1000000:
                 eval_prev_state_reshaped.append(eval_prev_state[x])
 
             eval_prev_state = np.concatenate(np.array(eval_prev_state_reshaped), axis = None)
-            eval_prev_state = obs_norm(eval_prev_state)
 
             eval_ep_reward = 0
 
@@ -451,7 +422,6 @@ while t_steps < 1000000:
                     eval_state_reshaped.append(eval_state[x])
 
                 eval_state = np.concatenate(np.array(eval_state_reshaped), axis = None)
-                eval_state = obs_norm(eval_state)
 
                 eval_ep_reward += eval_reward
 
