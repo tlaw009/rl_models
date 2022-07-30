@@ -61,31 +61,33 @@ class OUActionNoise:
             self.x_prev = np.zeros_like(self.mean)
 
 
-obs_init = env.observation_space.sample()
-while 0 in obs_init:
-    obs_init = env.observation_space.sample()
+
+running_shift = np.zeros(num_states)
+running_scale = np.ones(num_states)
+running_momentum = 0.99
+init_period = 256 # should be consistent with batch size
+var_batch = np.zeros([init_period, num_states])
+sample_index = 0
+
+def obs_norm(state):
+    global sample_index
+
+    norm_state = np.zeros(num_states)
+    var_batch[sample_index] = state
+    sample_index = (sample_index + 1)%init_period
+
+    for i in range(num_states):
+        running_shift[i] = running_shift[i]* running_momentum + state[i]* (1-running_momentum)
+        if len(var_batch) >= init_period:
+            if not state[i] == running_shift[i]:
+                running_scale[i] = running_scale[i]* running_momentum + np.var(var_batch, axis=0)[i]* (1-running_momentum)
+
+        norm_state[i] = (state[i]-running_shift[i])/np.sqrt(running_scale[i]+EPSILON)
+        
+    return norm_state
 
 print("State Normalization Initialized", flush=True)
 
-obs_upper = np.zeros(num_states)
-obs_lower = np.zeros(num_states)
-
-for i in range(num_states):
-    if obs_init[i] > 0:
-        obs_upper[i] =  obs_init[i]
-    elif obs_init[i] < 0:
-        obs_lower[i] = obs_init[i]
-
-def obs_norm(state):
-    norm_state = np.zeros(num_states)
-    for i in range(num_states):
-        if state[i] > obs_upper[i]:
-            obs_upper[i] =  state[i]
-        if state[i] < obs_lower[i]:
-            obs_lower[i] = state[i]
-        norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i])
-        
-    return norm_state
 ##########*****####################*****##########
 
 
