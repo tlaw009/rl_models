@@ -272,17 +272,14 @@ buffer = Buffer(100000, BATCH_SIZE)
 # To store reward history of each episode
 eval_ep_reward_list = []
 eval_avg_reward_list = []
-ep_reward_list = []
-# To store average reward history of last few episodes
-avg_reward_list = []
 ##########*****####################*****##########
 
 #################### Training ####################
-best_ep_reward = 0.0
-best_avg_reward = 0.0
+
 eval_flag = False
 ep = 0
 t_steps = 0
+RO_SIZE=1000
 
 while ep < total_episodes:
 
@@ -325,7 +322,6 @@ while ep < total_episodes:
         prev_state = env.reset()
         prev_state = obs_norm(prev_state)
 
-        episodic_reward = 0
 
         while True:
             # Uncomment this to see the Actor in action
@@ -342,33 +338,20 @@ while ep < total_episodes:
 
             buffer.record((prev_state, action, reward, state))
 
-            episodic_reward += reward
-
             buffer.learn()
             update_target(target_actor.variables, actor_model.variables, tau)
             update_target(target_critic.variables, critic_model.variables, tau)
             t_steps += 1
+            if t_steps%RO_SIZE == 0:
+                eval_flag = True
             # End this episode when `done` is True
             if done:
                 break
 
             prev_state = state
 
-        ep_reward_list.append(episodic_reward)
 
-        # Mean of last 40 episodes
-        avg_reward = np.mean(ep_reward_list)
-        print("Episode * {} * Reward is ==> {}".format(ep, avg_reward), flush=True)
 
-        if(episodic_reward > best_ep_reward):        
-            best_ep_reward = episodic_reward
-
-        if(avg_reward > best_avg_reward):
-            best_avg_reward = avg_reward
-
-        avg_reward_list.append(avg_reward)
-        print("TOTAL STEPS: ", t_steps, flush=True)
-        eval_flag = True
 # Plotting graph
 # Episodes versus Avg. Rewards
 plt.plot(eval_avg_reward_list)
