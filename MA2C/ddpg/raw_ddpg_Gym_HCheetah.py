@@ -82,7 +82,7 @@ def obs_norm(state):
 
     for i in range(num_states):
         running_shift[i] = running_shift[i]* running_momentum + state[i]* (1-running_momentum)
-        if len(var_batch) >= init_period:
+        if len(var_batch) == init_period:
             if not state[i] == running_shift[i]:
                 running_scale[i] = running_scale[i]* running_momentum + np.var(var_batch, axis=0)[i]* (1-running_momentum)
 
