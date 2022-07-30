@@ -12,6 +12,7 @@ import json
 import random
 
 ################## GLOBAL SETUP P1 ##################
+EPSILON = 1e-16
 
 problem = "Hopper-v2"
 env = gym.make(problem)

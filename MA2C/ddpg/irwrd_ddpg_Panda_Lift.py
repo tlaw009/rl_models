@@ -14,6 +14,7 @@ import random
 ################## GLOBAL SETUP P1 ##################
 
 # real env setup
+EPSILON = 1e-16
 
 config = load_controller_config(default_controller="OSC_POSE")
 
