@@ -43,7 +43,7 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
 running_shift = np.zeros(num_states)
 running_scale = np.ones(num_states)
-running_momentum = 0.99
+running_momentum = 0.9
 init_period = 256 # should be consistent with batch size
 var_batch = np.zeros([init_period, num_states])
 sample_index = 0
@@ -62,7 +62,7 @@ def obs_norm(state):
                 running_scale[i] = running_scale[i]* running_momentum + np.var(var_batch, axis=0)[i]* (1-running_momentum)
 
         norm_state[i] = (state[i]-running_shift[i])/np.sqrt(running_scale[i]+EPSILON)
-        
+
     return norm_state
 
 print("State Normalization Initialized", flush=True)

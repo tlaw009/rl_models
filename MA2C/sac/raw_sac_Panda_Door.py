@@ -82,7 +82,7 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
 running_shift = np.zeros(num_states)
 running_scale = np.ones(num_states)
-running_momentum = 0.99
+running_momentum = 0.9
 init_period = 256 # should be consistent with batch size
 var_batch = np.zeros([init_period, num_states])
 sample_index = 0
