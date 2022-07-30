@@ -313,7 +313,7 @@ while ep < total_episodes:
         eval_avg_reward = np.mean(eval_ep_reward_list)
         eval_avg_reward_list.append(eval_avg_reward)
 
-        print("Episode * {} * eval Reward is ==> {}".format(ep, eval_avg_reward), flush=True)
+        print("Rollout * {} * eval Reward is ==> {}".format(ep, eval_avg_reward), flush=True)
         ep = ep + 1
         eval_flag = False
 
