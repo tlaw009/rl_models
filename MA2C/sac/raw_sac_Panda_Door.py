@@ -233,7 +233,6 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        # self.norm_layer = layers.BatchNormalization(momentum=0.9)
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
@@ -241,7 +240,6 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        # state = self.norm_layer(state, training=not eval_mode)
         a1 = self.dense1_layer(state, training=not eval_mode)
         a2 = self.dense2_layer(a1, training=not eval_mode)
         mu = self.mean_layer(a2, training=not eval_mode)
