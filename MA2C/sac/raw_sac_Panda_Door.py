@@ -274,7 +274,6 @@ class Actor(Model):
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_input = layers.BatchNormalization()(state_input)
     state_out = layers.Dense(128, activation="relu")(state_input)
     # state_out = layers.Dense(32, activation="relu")(state_out)
 
