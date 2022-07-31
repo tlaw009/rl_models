@@ -313,7 +313,6 @@ RO_index = 0
 while t_steps < 1000000:
 
     prev_state = env.reset()
-    prev_state = obs_norm(prev_state)
 
     episodic_reward = 0
 
@@ -328,7 +327,6 @@ while t_steps < 1000000:
 
         # Recieve state and reward from environment.
         state, reward, done, info = env.step(action)
-        state = obs_norm(state)
 
         if done:
             end = 0
@@ -348,7 +346,6 @@ while t_steps < 1000000:
         if t_steps%RO_SIZE == 0:
 
             eval_prev_state = eval_env.reset()
-            eval_prev_state = obs_norm(eval_prev_state)
 
             eval_ep_reward = 0
 
@@ -363,7 +360,6 @@ while t_steps < 1000000:
 
                 # Recieve state and reward from environment.
                 eval_state, eval_reward, eval_done, info = eval_env.step(eval_action)
-                eval_state = obs_norm(eval_state)
 
                 eval_ep_reward += eval_reward
 
