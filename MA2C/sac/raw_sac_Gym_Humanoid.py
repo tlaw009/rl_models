@@ -41,30 +41,46 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 #Observation normalization#
 ###########################
 
-obs_upper = tf.zeros(num_states, dtype='float64')
-obs_lower = tf.zeros(num_states, dtype='float64')
+obs_upper = np.zeros(num_states)
+obs_lower = np.zeros(num_states)
 
-def obs_norm(state_batch):
-    global obs_upper, obs_lower
+def obs_norm(state):
+    norm_state = np.zeros(num_states)
+    for i in range(num_states):
+        if state[i] > obs_upper[i]:
+            obs_upper[i] = state[i]
+        if state[i] < obs_lower[i]:
+            obs_lower[i] = state[i]
+        norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
 
-    state_batch_unstacked = tf.unstack(state_batch)
-    norm_batch_non_tf = []
-    for state in state_batch_unstacked:
-        norm_state = tf.zeros(num_states, dtype='float64')
-        for i in range(num_states):
-            if state[i] > obs_upper[i]:
-                obs_upper = tf.tensor_scatter_nd_update(obs_upper, [[i]], [state[i]])
-                # obs_upper[i] =  state[i]
-            if state[i] < obs_lower[i]:
-                obs_lower = tf.tensor_scatter_nd_update(obs_lower, [[i]], [state[i]])
-                # obs_lower[i] = state[i]
-            norm_state = tf.tensor_scatter_nd_update(norm_state, [[i]], [state[i]/(obs_upper[i] - obs_lower[i] + EPSILON)])
-            # norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i] + EPSILON)
-        norm_batch_non_tf.append(norm_state)
-
-    return tf.stack(norm_batch_non_tf)
+    return norm_state
 
 print("State Normalization Initialized", flush=True)
+
+# obs_upper = tf.zeros(num_states, dtype='float64')
+# obs_lower = tf.zeros(num_states, dtype='float64')
+
+# def obs_norm(state_batch):
+#     global obs_upper, obs_lower
+
+#     state_batch_unstacked = tf.unstack(state_batch)
+#     norm_batch_non_tf = []
+#     for state in state_batch_unstacked:
+#         norm_state = tf.zeros(num_states, dtype='float64')
+#         for i in range(num_states):
+#             if state[i] > obs_upper[i]:
+#                 obs_upper = tf.tensor_scatter_nd_update(obs_upper, [[i]], [state[i]])
+#                 # obs_upper[i] =  state[i]
+#             if state[i] < obs_lower[i]:
+#                 obs_lower = tf.tensor_scatter_nd_update(obs_lower, [[i]], [state[i]])
+#                 # obs_lower[i] = state[i]
+#             norm_state = tf.tensor_scatter_nd_update(norm_state, [[i]], [state[i]/(obs_upper[i] - obs_lower[i] + EPSILON)])
+#             # norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i] + EPSILON)
+#         norm_batch_non_tf.append(norm_state)
+
+#     return tf.stack(norm_batch_non_tf)
+
+# print("State Normalization Initialized", flush=True)
 
 ##########*****####################*****##########
 
@@ -106,17 +122,16 @@ class Buffer:
     def update(
         self, state_batch, action_batch, reward_batch, next_state_batch, done_batch
     ):
-
         # Training and updating Actor & Critic networks.
         with tf.GradientTape() as tape1:
             # Get Q value estimates, action used here is from the replay buffer
-            q1 = critic_model_1([obs_norm(state_batch), action_batch])
+            q1 = critic_model_1([state_batch, action_batch])
             # Sample actions from the policy for next states
             pi_a, log_pi_a = actor_model(next_state_batch)
 
             # Get Q value estimates from target Q network
-            q1_target = target_critic_1([obs_norm(next_state_batch), pi_a])
-            q2_target = target_critic_2([obs_norm(next_state_batch), pi_a])
+            q1_target = target_critic_1([next_state_batch, pi_a])
+            q2_target = target_critic_2([next_state_batch, pi_a])
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
@@ -132,13 +147,13 @@ class Buffer:
 
         with tf.GradientTape() as tape2:
             # Get Q value estimates, action used here is from the replay buffer
-            q2 = critic_model_2([obs_norm(state_batch), action_batch])
+            q2 = critic_model_2([state_batch, action_batch])
             # Sample actions from the policy for next states
             pi_a, log_pi_a = actor_model(next_state_batch)
 
             # Get Q value estimates from target Q network
-            q1_target = target_critic_1([obs_norm(next_state_batch), pi_a])
-            q2_target = target_critic_2([obs_norm(next_state_batch), pi_a])
+            q1_target = target_critic_1([next_state_batch, pi_a])
+            q2_target = target_critic_2([next_state_batch, pi_a])
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
@@ -164,8 +179,8 @@ class Buffer:
             # Sample actions from the policy for current states
             pi_a, log_pi_a = actor_model(state_batch)
 
-            q1 = critic_model_1([obs_norm(state_batch), pi_a])
-            q2 = critic_model_2([obs_norm(state_batch), pi_a])
+            q1 = critic_model_1([state_batch, pi_a])
+            q2 = critic_model_2([state_batch, pi_a])
 
             soft_q = tf.reduce_mean([q1, q2], axis = 0)
 
@@ -229,7 +244,6 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        state = obs_norm(state)
         a1 = self.dense1_layer(state, training=not eval_mode)
         a2 = self.dense2_layer(a1, training=not eval_mode)
         mu = self.mean_layer(a2, training=not eval_mode)
@@ -339,6 +353,7 @@ RO_index = 0
 while t_steps < 10000000:
 
     prev_state = env.reset()
+    prev_state = obs_norm(prev_state)
 
     episodic_reward = 0
 
@@ -353,6 +368,7 @@ while t_steps < 10000000:
 
         # Recieve state and reward from environment.
         state, reward, done, info = env.step(action)
+        state = obs_norm(state)
 
         if done:
             end = 0
@@ -372,6 +388,7 @@ while t_steps < 10000000:
         if t_steps%RO_SIZE == 0:
 
             eval_prev_state = eval_env.reset()
+            eval_prev_state = obs_norm(eval_prev_state)
 
             eval_ep_reward = 0
 
@@ -386,7 +403,8 @@ while t_steps < 10000000:
 
                 # Recieve state and reward from environment.
                 eval_state, eval_reward, eval_done, info = eval_env.step(eval_action)
-
+                eval_state = obs_norm(eval_state)
+                
                 eval_ep_reward += eval_reward
 
                 if eval_done:
