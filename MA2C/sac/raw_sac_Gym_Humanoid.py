@@ -131,7 +131,6 @@ class Buffer:
         critic2_optimizer.apply_gradients(zip(grads2,
                                                    critic_model_2.trainable_variables))
 
-
         with tf.GradientTape() as tape3:
             # Sample actions from the policy for current states
             pi_a, log_pi_a = actor_model(state_batch)
@@ -217,20 +216,20 @@ class Actor(Model):
         # dist = tfp.distributions.Normal(mu, sigma)
         dist = tfp.distributions.MultivariateNormalTriL(loc=mu, scale_tril=tf.linalg.cholesky(covar_m))
         if eval_mode:
-            action = tf.tanh(mu)
-            log_pi = tf.constant(0, dtype='float64')
+            action_ = mu
         else:
             action_ = dist.sample()
-            # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
-            action = tf.tanh(action_)
 
-            # Calculate the log probability
-            log_pi_ = dist.log_prob(action_)
+        # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
+        action = tf.tanh(action_)
 
-            # Change log probability to account for tanh squashing as mentioned in
-            # Appendix C of the paper
-            log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
-                                        -1)        
+        # Calculate the log probability
+        log_pi_ = dist.log_prob(action_)
+
+        # Change log probability to account for tanh squashing as mentioned in
+        # Appendix C of the paper
+        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
+                                    -1)        
 
         return action*upper_bound, log_pi
 
@@ -291,7 +290,7 @@ gamma = 0.99
 # Used to update target networks
 tau = 0.005
 BATCH_SIZE = 256
-buffer = Buffer(100000, BATCH_SIZE)
+buffer = Buffer(1000000, BATCH_SIZE)
 
 
 # To store reward history of each episode

@@ -233,6 +233,7 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
+        self.norm_layer = layers.BatchNormalization()
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
@@ -240,6 +241,7 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
+        state = self.norm_layer(state, training=not eval_mode)
         a1 = self.dense1_layer(state, training=not eval_mode)
         a2 = self.dense2_layer(a1, training=not eval_mode)
         mu = self.mean_layer(a2, training=not eval_mode)
@@ -254,26 +256,27 @@ class Actor(Model):
         # dist = tfp.distributions.Normal(mu, sigma)
         dist = tfp.distributions.MultivariateNormalTriL(loc=mu, scale_tril=tf.linalg.cholesky(covar_m))
         if eval_mode:
-            action = tf.tanh(mu)
-            log_pi = tf.constant(0, dtype='float64')
+            action_ = mu
         else:
             action_ = dist.sample()
-            # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
-            action = tf.tanh(action_)
 
-            # Calculate the log probability
-            log_pi_ = dist.log_prob(action_)
+        # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
+        action = tf.tanh(action_)
 
-            # Change log probability to account for tanh squashing as mentioned in
-            # Appendix C of the paper
-            log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
-                                        -1)        
+        # Calculate the log probability
+        log_pi_ = dist.log_prob(action_)
+
+        # Change log probability to account for tanh squashing as mentioned in
+        # Appendix C of the paper
+        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
+                                    -1)        
 
         return action*upper_bound, log_pi
 
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
+    state_input = layers.BatchNormalization()(state_input)
     state_out = layers.Dense(128, activation="relu")(state_input)
     # state_out = layers.Dense(32, activation="relu")(state_out)
 
@@ -327,7 +330,7 @@ gamma = 0.99
 # Used to update target networks
 tau = 0.005
 BATCH_SIZE = 256
-buffer = Buffer(100000, BATCH_SIZE)
+buffer = Buffer(1000000, BATCH_SIZE)
 
 
 # To store reward history of each episode
