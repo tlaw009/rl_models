@@ -120,13 +120,13 @@ class Buffer:
         # Training and updating Actor & Critic networks.
         with tf.GradientTape() as tape1:
             # Get Q value estimates, action used here is from the replay buffer
-            q1 = critic_model_1([state_batch, action_batch])
+            q1 = critic_model_1([state_batch, action_batch], training=True)
             # Sample actions from the policy for next states
             pi_a, log_pi_a = actor_model(next_state_batch)
 
             # Get Q value estimates from target Q network
-            q1_target = target_critic_1([next_state_batch, pi_a])
-            q2_target = target_critic_2([next_state_batch, pi_a])
+            q1_target = target_critic_1([next_state_batch, pi_a], training=True)
+            q2_target = target_critic_2([next_state_batch, pi_a], training=True)
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
@@ -142,13 +142,13 @@ class Buffer:
 
         with tf.GradientTape() as tape2:
             # Get Q value estimates, action used here is from the replay buffer
-            q2 = critic_model_2([state_batch, action_batch])
+            q2 = critic_model_2([state_batch, action_batch], training=True)
             # Sample actions from the policy for next states
             pi_a, log_pi_a = actor_model(next_state_batch)
 
             # Get Q value estimates from target Q network
-            q1_target = target_critic_1([next_state_batch, pi_a])
-            q2_target = target_critic_2([next_state_batch, pi_a])
+            q1_target = target_critic_1([next_state_batch, pi_a], training=True)
+            q2_target = target_critic_2([next_state_batch, pi_a], training=True)
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
@@ -175,8 +175,8 @@ class Buffer:
             # Sample actions from the policy for current states
             pi_a, log_pi_a = actor_model(state_batch)
 
-            q1 = critic_model_1([state_batch, pi_a])
-            q2 = critic_model_2([state_batch, pi_a])
+            q1 = critic_model_1([state_batch, pi_a], training=True)
+            q2 = critic_model_2([state_batch, pi_a], training=True)
 
             soft_q = tf.reduce_mean([q1, q2], axis = 0)
 
@@ -233,6 +233,7 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
+        # self.norm_layer = layers.BatchNormalization()
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
@@ -240,13 +241,14 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        a1 = self.dense1_layer(state)
-        a2 = self.dense2_layer(a1)
-        mu = self.mean_layer(a2)
+        # state = self.norm_layer(state, training=not eval_mode)
+        a1 = self.dense1_layer(state, training=not eval_mode)
+        a2 = self.dense2_layer(a1, training=not eval_mode)
+        mu = self.mean_layer(a2, training=not eval_mode)
 
         # Standard deviation is bounded by a constraint of being non-negative
         # therefore we produce log stdev as output which can be [-inf, inf]
-        log_sigma = self.stdev_layer(a2)
+        log_sigma = self.stdev_layer(a2, training=not eval_mode)
         sigma = tf.exp(log_sigma)
 
         covar_m = tf.linalg.diag(sigma**2)
@@ -274,6 +276,7 @@ class Actor(Model):
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
+    state_input = layers.BatchNormalization()(state_input)
     state_out = layers.Dense(128, activation="relu")(state_input)
     # state_out = layers.Dense(32, activation="relu")(state_out)
 
