@@ -72,7 +72,6 @@ def obs_norm(state_batch):
 
 print("State Normalization Initialized", flush=True)
 
-
 ##########*****####################*****##########
 
 #################### Replay Buffer ####################
