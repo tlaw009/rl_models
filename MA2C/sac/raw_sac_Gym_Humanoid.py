@@ -44,16 +44,31 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 obs_upper = np.zeros(num_states)
 obs_lower = np.zeros(num_states)
 
-def obs_norm(state):
-    norm_state = np.zeros(num_states)
-    for i in range(num_states):
-        if state[i] > obs_upper[i]:
-            obs_upper[i] = state[i]
-        if state[i] < obs_lower[i]:
-            obs_lower[i] = state[i]
-        norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
+def obs_norm(state_batch):
+    if len(state_batch.shape) == 2:
+        norm_state_batch = []
+        for state in state_batch:
+            norm_state = np.zeros(num_states)
+            for i in range(num_states):
+                if state[i] > obs_upper[i]:
+                    obs_upper[i] = state[i]
+                if state[i] < obs_lower[i]:
+                    obs_lower[i] = state[i]
+                norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
+            norm_state_batch.append(norm_state)
 
-    return norm_state
+        return norm_state_batch
+    else: 
+        state = state_batch
+        norm_state = np.zeros(num_states)
+        for i in range(num_states):
+            if state[i] > obs_upper[i]:
+                obs_upper[i] = state[i]
+            if state[i] < obs_lower[i]:
+                obs_lower[i] = state[i]
+            norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
+
+        return norm_state
 
 print("State Normalization Initialized", flush=True)
 
@@ -211,11 +226,11 @@ class Buffer:
         batch_indices = np.random.choice(record_range, self.batch_size)
 
         # Convert to tensors
-        state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
+        state_batch = tf.convert_to_tensor(obs_norm(self.state_buffer[batch_indices]))
         action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
         reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
         reward_batch = tf.cast(reward_batch, dtype=tf.float64)
-        next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
+        next_state_batch = tf.convert_to_tensor(obs_norm(self.next_state_buffer[batch_indices]))
         done_batch = tf.convert_to_tensor(self.done_buffer[batch_indices])
 
         self.update(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
@@ -353,14 +368,13 @@ RO_index = 0
 while t_steps < 10000000:
 
     prev_state = env.reset()
-    prev_state = obs_norm(prev_state)
 
     episodic_reward = 0
 
     while True:
         # env.render()
 
-        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
+        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(prev_state)), 0)
 
         action, log_a = actor_model(tf_prev_state)
 
@@ -368,7 +382,6 @@ while t_steps < 10000000:
 
         # Recieve state and reward from environment.
         state, reward, done, info = env.step(action)
-        state = obs_norm(state)
 
         if done:
             end = 0
@@ -388,14 +401,13 @@ while t_steps < 10000000:
         if t_steps%RO_SIZE == 0:
 
             eval_prev_state = eval_env.reset()
-            eval_prev_state = obs_norm(eval_prev_state)
 
             eval_ep_reward = 0
 
             while True:
                 # eval_env.render()
 
-                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
+                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(eval_prev_state)), 0)
 
                 eval_action, eval_log_a = actor_model(eval_tf_prev_state, eval_mode=True)
 
@@ -403,8 +415,7 @@ while t_steps < 10000000:
 
                 # Recieve state and reward from environment.
                 eval_state, eval_reward, eval_done, info = eval_env.step(eval_action)
-                eval_state = obs_norm(eval_state)
-                
+
                 eval_ep_reward += eval_reward
 
                 if eval_done:
