@@ -28,7 +28,7 @@ lower_bound = env.action_space.low[0]
 print("Max Value of Action ->  {}".format(upper_bound), flush=True)
 print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
-MBATCH_SIZE = 256
+minibatch_size = 256
 
 ##########*****####################*****##########
 
