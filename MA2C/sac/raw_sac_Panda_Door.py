@@ -30,8 +30,8 @@ env = suite.make(
     has_renderer=False,
     ignore_done=False,
     has_offscreen_renderer=False,
-    reward_shaping=True,
     use_camera_obs=False,
+    reward_shaping=True,
 )
 
 eval_env = suite.make(
@@ -41,8 +41,8 @@ eval_env = suite.make(
     has_renderer=False,
     ignore_done=False,
     has_offscreen_renderer=False,
-    reward_shaping=True,
     use_camera_obs=False,
+    reward_shaping=True,
 )
 
 obs_keys = ['robot0_joint_pos_cos', 'robot0_joint_pos_sin', 
@@ -275,13 +275,13 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        a1 = self.dense1_layer(state, training=not eval_mode)
-        a2 = self.dense2_layer(a1, training=not eval_mode)
-        mu = self.mean_layer(a2, training=not eval_mode)
+        a1 = self.dense1_layer(state)
+        a2 = self.dense2_layer(a1)
+        mu = self.mean_layer(a2)
 
         # Standard deviation is bounded by a constraint of being non-negative
         # therefore we produce log stdev as output which can be [-inf, inf]
-        log_sigma = self.stdev_layer(a2, training=not eval_mode)
+        log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
         covar_m = tf.linalg.diag(sigma**2)
@@ -301,7 +301,7 @@ class Actor(Model):
 
         # Change log probability to account for tanh squashing as mentioned in
         # Appendix C of the paper
-        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2), axis=1),
+        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
                                     -1)        
 
         return action*upper_bound, log_pi

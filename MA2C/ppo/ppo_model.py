@@ -88,19 +88,20 @@ class Buffer:
 
     def get(self):
         # Get all data of the buffer and normalize the advantages
-        self.pointer, self.trajectory_start_index = 0, 0
+        rindex = np.random.randint(0, self.pointer - minibatch_size)
         advantage_mean, advantage_std = (
-            np.mean(self.advantage_buffer),
-            np.std(self.advantage_buffer),
+            np.mean(self.advantage_buffer[rindex:rindex+minibatch_size]),
+            np.std(self.advantage_buffer[rindex:rindex+minibatch_size]),
         )
-        self.advantage_buffer = (self.advantage_buffer - advantage_mean) / advantage_std
         return (
-            self.observation_buffer,
-            self.action_buffer,
-            self.advantage_buffer,
-            self.return_buffer,
-            self.logprobability_buffer,
+            self.observation_buffer[rindex:rindex+minibatch_size],
+            self.action_buffer[rindex:rindex+minibatch_size],
+            (self.advantage_buffer[rindex:rindex+minibatch_size] - advantage_mean) / advantage_std,
+            self.return_buffer[rindex:rindex+minibatch_size],
+            self.logprobability_buffer[rindex:rindex+minibatch_size],
         )
+    def clear(self):
+        self.pointer, self.trajectory_start_index = 0, 0
 
 ##########*****####################*****##########
 
@@ -178,8 +179,7 @@ steps_per_epoch = 2000
 epochs = 500
 gamma = 0.99
 clip_ratio = 0.2
-train_policy_iterations = 10
-train_value_iterations = 10
+train_iterations = 10
 lam = 0.97
 target_kl = 0.01
 
@@ -289,31 +289,42 @@ for epoch in range(epochs):
             observation, episode_return, episode_length = env.reset(), 0, 0
 
     # Get values from the buffer
-    (
-        observation_buffer,
-        action_buffer,
-        advantage_buffer,
-        return_buffer,
-        logprobability_buffer,
-    ) = buffer.get()
+    # (
+    #     observation_buffer,
+    #     action_buffer,
+    #     advantage_buffer,
+    #     return_buffer,
+    #     logprobability_buffer,
+    # ) = buffer.get()
 
     # Update the policy and implement early stopping using KL divergence
-    for _ in range(train_policy_iterations):
+    for _ in range(train_iterations):
+
+        (
+            observation_buffer,
+            action_buffer,
+            advantage_buffer,
+            return_buffer,
+            logprobability_buffer,
+        ) = buffer.get()
+
         kl = train_policy(
             observation_buffer, action_buffer, logprobability_buffer, advantage_buffer
         )
+
+        train_value_function(observation_buffer, return_buffer)
+
         if kl > 1.5 * target_kl:
             # Early Stopping
             break
-
+    buffer.clear()
     # Update the value function
-    for _ in range(train_value_iterations):
-        train_value_function(observation_buffer, return_buffer)
+
 
     # Print mean return and length for each epoch
-    print(
-        f" Epoch: {epoch + 1}. Mean Return: {sum_return / num_episodes}. Mean Length: {sum_length / num_episodes}"
-    )
+    # print(
+    #     f" Epoch: {epoch + 1}. Mean Return: {sum_return / num_episodes}. Mean Length: {sum_length / num_episodes}"
+    # )
 
 # Plotting graph
 # Episodes versus Avg. Rewards
@@ -323,9 +334,3 @@ plt.ylabel("Avg. Epsiodic Reward, train")
 plt.show()
 
 ##########*****####################*****##########
-
-# actor_model.save_weights("weights/custom_sac_actor_final.h5")
-# critic_model.save_weights("weights/custom_sac_critic_final.h5")
-
-# target_actor.save_weights("weights/custom_sac_target_actor_final.h5")
-# target_critic.save_weights("weights/custom_sac_target_critic_final.h5")
