@@ -329,15 +329,12 @@ buffer = Buffer(1000000, BATCH_SIZE)
 # To store reward history of each episode
 eval_ep_reward_list = []
 eval_avg_reward_list = []
-ep_reward_list = []
-avg_reward_list = []
 
 ##########*****####################*****##########
 
 
 #################### Training ####################
 
-ep = 0
 t_steps = 0
 RO_SIZE=1000 
 RO_index = 0
@@ -413,10 +410,6 @@ while t_steps < 3000000:
             break
 
         prev_state = state
-
-    ep_reward_list.append(episodic_reward)
-
-    ep = ep + 1
 
 # Plotting graph
 # Episodes versus Avg. Rewards

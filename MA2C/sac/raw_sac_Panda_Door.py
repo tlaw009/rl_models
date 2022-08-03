@@ -242,11 +242,11 @@ class Buffer:
         batch_indices = np.random.choice(record_range, self.batch_size)
 
         # Convert to tensors
-        state_batch = tf.convert_to_tensor(obs_norm(self.state_buffer[batch_indices]))
+        state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
         action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
         reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
         reward_batch = tf.cast(reward_batch, dtype=tf.float64)
-        next_state_batch = tf.convert_to_tensor(obs_norm(self.next_state_buffer[batch_indices]))
+        next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
         done_batch = tf.convert_to_tensor(self.done_buffer[batch_indices])
 
         self.update(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
@@ -368,15 +368,12 @@ buffer = Buffer(1000000, BATCH_SIZE)
 # To store reward history of each episode
 eval_ep_reward_list = []
 eval_avg_reward_list = []
-ep_reward_list = []
-avg_reward_list = []
 
 ##########*****####################*****##########
 
 
 #################### Training ####################
 
-ep = 0
 t_steps = 0
 RO_SIZE=1000 
 RO_index = 0
@@ -396,7 +393,7 @@ while t_steps < 1000000:
     while True:
         # env.render()
 
-        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(prev_state)), 0)
+        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 
         action, log_a = actor_model(tf_prev_state)
 
@@ -442,7 +439,7 @@ while t_steps < 1000000:
             while True:
                 # eval_env.render()
 
-                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(eval_prev_state)), 0)
+                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
 
                 eval_action, eval_log_a = actor_model(eval_tf_prev_state, eval_mode=True)
 
@@ -478,10 +475,6 @@ while t_steps < 1000000:
             break
 
         prev_state = state
-
-    ep_reward_list.append(episodic_reward)
-
-    ep = ep + 1
 
 # Plotting graph
 # Episodes versus Avg. Rewards

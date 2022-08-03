@@ -1,14 +1,10 @@
-import gym
-import tensorflow as tf
-from tensorflow.keras import layers
-from tensorflow.keras import Model
 import numpy as np
-import matplotlib.pyplot as plt
-import os
-import json
-import random
-import tensorflow_probability as tfp
-from tensorflow.keras import regularizers
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+import gym
+import scipy.signal
+import time
 
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
@@ -32,14 +28,16 @@ lower_bound = env.action_space.low[0]
 print("Max Value of Action ->  {}".format(upper_bound), flush=True)
 print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
+MBATCH_SIZE = 256
 
 ##########*****####################*****##########
 
 #################### Auxiliaries ####################
 
-###################
-#Missing Fun Stuff#
-###################
+def discounted_cumulative_sums(x, discount):
+    # Discounted cumulative sums of vectors for computing rewards-to-go and advantage estimates
+    return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
+
 
 ##########*****####################*****##########
 
@@ -47,147 +45,62 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 #################### Replay Buffer ####################
 
 class Buffer:
-    def __init__(self, buffer_capacity=100000, batch_size=64):
-        # Number of "experiences" to store at max
-        self.buffer_capacity = buffer_capacity
-        # Num of tuples to train on.
-        self.batch_size = batch_size
+    # Buffer for storing trajectories
+    def __init__(self, observation_dimensions, action_dimensions, size, gamma=0.99, lam=0.95):
+        # Buffer initialization
+        self.observation_buffer = np.zeros(
+            (size, observation_dimensions), dtype=np.float32
+        )
+        self.action_buffer = np.zeros((size, action_dimensions), dtype=np.int32)
+        self.advantage_buffer = np.zeros(size, dtype=np.float32)
+        self.reward_buffer = np.zeros(size, dtype=np.float32)
+        self.return_buffer = np.zeros(size, dtype=np.float32)
+        self.value_buffer = np.zeros(size, dtype=np.float32)
+        self.logprobability_buffer = np.zeros(size, dtype=np.float32)
+        self.gamma, self.lam = gamma, lam
+        self.pointer, self.trajectory_start_index = 0, 0
 
-        # Its tells us num of times record() was called.
-        self.buffer_counter = 0
+    def store(self, observation, action, reward, value, logprobability):
+        # Append one step of agent-environment interaction
+        self.observation_buffer[self.pointer] = observation
+        self.action_buffer[self.pointer] = action
+        self.reward_buffer[self.pointer] = reward
+        self.value_buffer[self.pointer] = value
+        self.logprobability_buffer[self.pointer] = logprobability
+        self.pointer += 1
 
-        # Instead of list of tuples as the exp.replay concept go
-        # We use different np.arrays for each tuple element
-        self.state_buffer = np.zeros((self.buffer_capacity, num_states))
-        self.action_buffer = np.zeros((self.buffer_capacity, num_actions))
-        self.reward_buffer = np.zeros((self.buffer_capacity, 1))
-        self.next_state_buffer = np.zeros((self.buffer_capacity, num_states))
-        self.done_buffer = np.zeros((self.buffer_capacity, 1))
+    def finish_trajectory(self, last_value=0):
+        # Finish the trajectory by computing advantage estimates and rewards-to-go
+        path_slice = slice(self.trajectory_start_index, self.pointer)
+        rewards = np.append(self.reward_buffer[path_slice], last_value)
+        values = np.append(self.value_buffer[path_slice], last_value)
 
-    # Takes (s,a,r,s',d) obervation tuple as input
-    def record(self, obs_tuple):
-        # Set index to zero if buffer_capacity is exceeded,
-        # replacing old records
-        index = self.buffer_counter % self.buffer_capacity
+        deltas = rewards[:-1] + self.gamma * values[1:] - values[:-1]
 
-        self.state_buffer[index] = obs_tuple[0]
-        self.action_buffer[index] = obs_tuple[1]
-        self.reward_buffer[index] = obs_tuple[2]
-        self.next_state_buffer[index] = obs_tuple[3]
-        self.done_buffer[index] = obs_tuple[4]
-        self.buffer_counter += 1
+        self.advantage_buffer[path_slice] = discounted_cumulative_sums(
+            deltas, self.gamma * self.lam
+        )
+        self.return_buffer[path_slice] = discounted_cumulative_sums(
+            rewards, self.gamma
+        )[:-1]
 
-    # @tf.function
-    def update(
-        self, state_batch, action_batch, reward_batch, next_state_batch, done_batch
-    ):
+        self.trajectory_start_index = self.pointer
 
-        # Training and updating Actor & Critic networks.
-        with tf.GradientTape() as tape1:
-            # Get Q value estimates, action used here is from the replay buffer
-            q1 = critic_model_1([state_batch, action_batch])
-            # Sample actions from the policy for next states
-            pi_a, log_pi_a = actor_model(next_state_batch)
-
-            # Get Q value estimates from target Q network
-            q1_target = target_critic_1([next_state_batch, pi_a])
-            q2_target = target_critic_2([next_state_batch, pi_a])
-
-            # Apply the clipped double Q trick
-            # Get the minimum Q value of the 2 target networks
-            min_q_target = tf.math.minimum(q1_target, q2_target)
-
-            # Add the entropy term to get soft Q target
-            soft_q_target = min_q_target - alpha * log_pi_a
-
-            y = tf.stop_gradient(reward_batch + gamma * done_batch * soft_q_target)
-            critic1_losses = 0.5 * (
-                    tf.losses.MSE(y_true=y, y_pred=q1))
-            critic1_loss = tf.nn.compute_average_loss(critic1_losses)
-
-        with tf.GradientTape() as tape2:
-            # Get Q value estimates, action used here is from the replay buffer
-            q2 = critic_model_2([state_batch, action_batch])
-            # Sample actions from the policy for next states
-            pi_a, log_pi_a = actor_model(next_state_batch)
-
-            # Get Q value estimates from target Q network
-            q1_target = target_critic_1([next_state_batch, pi_a])
-            q2_target = target_critic_2([next_state_batch, pi_a])
-
-            # Apply the clipped double Q trick
-            # Get the minimum Q value of the 2 target networks
-            min_q_target = tf.math.minimum(q1_target, q2_target)
-
-            # Add the entropy term to get soft Q target
-            soft_q_target = min_q_target - alpha * log_pi_a
-
-            y = tf.stop_gradient(reward_batch + gamma * done_batch * soft_q_target)
-            critic2_losses = 0.5 * (
-                    tf.losses.MSE(y_true=y, y_pred=q2))
-            critic2_loss = tf.nn.compute_average_loss(critic2_losses)
-
-        grads1 = tape1.gradient(critic1_loss, critic_model_1.trainable_variables)
-        critic1_optimizer.apply_gradients(zip(grads1,
-                                                   critic_model_1.trainable_variables))
-
-        grads2 = tape2.gradient(critic2_loss, critic_model_2.trainable_variables)
-        critic2_optimizer.apply_gradients(zip(grads2,
-                                                   critic_model_2.trainable_variables))
-
-
-        with tf.GradientTape() as tape3:
-            # Sample actions from the policy for current states
-            pi_a, log_pi_a = actor_model(state_batch)
-
-            q1 = critic_model_1([state_batch, pi_a])
-            q2 = critic_model_2([state_batch, pi_a])
-
-            soft_q = tf.reduce_mean([q1, q2], axis = 0)
-
-            actor_losses = tf.math.add(tf.math.multiply(alpha,log_pi_a), -soft_q)
-            actor_loss = tf.nn.compute_average_loss(actor_losses)
-
-        variables3 = actor_model.trainable_variables
-        grads3 = tape3.gradient(actor_loss, variables3,
-                                 # unconnected_gradients=tf.UnconnectedGradients.ZERO)
-                                    )
-        actor_optimizer.apply_gradients(zip(grads3, variables3))
-
-        with tf.GradientTape() as tape4:
-            # Sample actions from the policy for current states
-            pi_a, log_pi_a = actor_model(state_batch)
-            alpha_loss = tf.nn.compute_average_loss(-alpha*tf.stop_gradient(log_pi_a +
-                                                       target_entropy))
-
-        variables4 = [alpha]
-        grads4 = tape4.gradient(alpha_loss, variables4)
-        alpha_optimizer.apply_gradients(zip(grads4, variables4))
-
-    # We compute the loss and update parameters
-    def learn(self):
-        # Get sampling range
-        record_range = min(self.buffer_counter, self.buffer_capacity)
-        # Randomly sample indices
-        batch_indices = np.random.choice(record_range, self.batch_size)
-
-        # Convert to tensors
-        state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
-        action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
-        reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
-        reward_batch = tf.cast(reward_batch, dtype=tf.float64)
-        next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
-        done_batch = tf.convert_to_tensor(self.done_buffer[batch_indices])
-
-        self.update(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
-
-
-# This update target parameters slowly
-# Based on rate `tau`, which is much less than one.
-# @tf.function
-def update_target(target_weights, weights, tau):
-    for (a, b) in zip(target_weights, weights):
-        a.assign(b * tau + a * (1 - tau))
+    def get(self):
+        # Get all data of the buffer and normalize the advantages
+        self.pointer, self.trajectory_start_index = 0, 0
+        advantage_mean, advantage_std = (
+            np.mean(self.advantage_buffer),
+            np.std(self.advantage_buffer),
+        )
+        self.advantage_buffer = (self.advantage_buffer - advantage_mean) / advantage_std
+        return (
+            self.observation_buffer,
+            self.action_buffer,
+            self.advantage_buffer,
+            self.return_buffer,
+            self.logprobability_buffer,
+        )
 
 ##########*****####################*****##########
 
@@ -198,7 +111,6 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.norm1_layer = layers.LayerNormalization()
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
@@ -206,14 +118,13 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        a1 = self.dense1_layer(state)
-        a1 = self.norm1_layer(a1)
-        a2 = self.dense2_layer(a1)
-        mu = self.mean_layer(a2)
+        a1 = self.dense1_layer(state, training=not eval_mode)
+        a2 = self.dense2_layer(a1, training=not eval_mode)
+        mu = self.mean_layer(a2, training=not eval_mode)
 
         # Standard deviation is bounded by a constraint of being non-negative
         # therefore we produce log stdev as output which can be [-inf, inf]
-        log_sigma = self.stdev_layer(a2)
+        log_sigma = self.stdev_layer(a2, training=not eval_mode)
         sigma = tf.exp(log_sigma)
 
         covar_m = tf.linalg.diag(sigma**2)
@@ -221,22 +132,22 @@ class Actor(Model):
         # dist = tfp.distributions.Normal(mu, sigma)
         dist = tfp.distributions.MultivariateNormalTriL(loc=mu, scale_tril=tf.linalg.cholesky(covar_m))
         if eval_mode:
-            action = tf.tanh(mu)
-            log_pi = tf.constant(0, dtype='float64')
+            action_ = mu
         else:
             action_ = dist.sample()
-            # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
-            action = tf.tanh(action_)
 
-            # Calculate the log probability
-            log_pi_ = dist.log_prob(action_)
+        # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
+        action = tf.tanh(action_)
 
-            # Change log probability to account for tanh squashing as mentioned in
-            # Appendix C of the paper
-            log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
-                                        -1)        
+        # Calculate the log probability
+        log_pi_ = dist.log_prob(action_)
 
-        return action, log_pi
+        # Change log probability to account for tanh squashing as mentioned in
+        # Appendix C of the paper
+        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
+                                    -1)        
+
+        return action*upper_bound, log_pi
 
 def get_critic():
     # State as input
@@ -250,7 +161,6 @@ def get_critic():
 
     # Concatenating
     concat = layers.Concatenate()([state_out, action_out])
-    concat = layers.LayerNormalization()(concat)
     out = layers.Dense(256, activation="relu")(concat)
     outputs = layers.Dense(1, dtype='float64')(out)
 
@@ -263,18 +173,22 @@ def get_critic():
 
 #################### GLOBAL SETUP P2 ####################
 
+# Hyperparameters of the PPO algorithm
+steps_per_epoch = 2000
+epochs = 500
+gamma = 0.99
+clip_ratio = 0.2
+train_policy_iterations = 10
+train_value_iterations = 10
+lam = 0.97
+target_kl = 0.01
+
+# True if you want to render the environment
+render = False
+
+
 actor_model = Actor()
-critic_model_1 = get_critic()
-critic_model_2 = get_critic()
-target_critic_1 = get_critic()
-target_critic_2 = get_critic()
-
-alpha=tf.Variable(0.0, dtype=tf.float64)
-target_entropy = -np.prod(num_actions)
-
-# Making the weights equal initially
-target_critic_1.set_weights(critic_model_1.get_weights())
-target_critic_2.set_weights(critic_model_2.get_weights())
+critic_model = get_critic()
 
 
 lr = 0.0003
@@ -284,111 +198,122 @@ lr = 0.0003
 # critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 # actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 
-alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+policy_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
 
-total_episodes = 5000
-# Discount factor for future rewards
-gamma = 0.99
-# Used to update target networks
-tau = 0.005
-BATCH_SIZE = 256
-buffer = Buffer(100000, BATCH_SIZE)
+value_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+
+buffer = Buffer(num_states, num_actions, steps_per_epoch)
 
 
 # To store reward history of each episode
 eval_ep_reward_list = []
 eval_avg_reward_list = []
-ep_reward_list = []
-avg_reward_list = []
 
 ##########*****####################*****##########
 
 
 #################### Training ####################
 
-ep = 0
+observation, episode_return, episode_length = env.reset(), 0, 0
+
+def train_policy(
+    observation_buffer, action_buffer, logprobability_buffer, advantage_buffer
+):
+    action, log_a = actor_model(observation_buffer)
+    with tf.GradientTape() as tape:  # Record operations for automatic differentiation.
+        ratio = tf.exp(
+            log_a
+            - logprobability_buffer
+        )
+        min_advantage = tf.where(
+            advantage_buffer > 0,
+            (1 + clip_ratio) * advantage_buffer,
+            (1 - clip_ratio) * advantage_buffer,
+        )
+
+        policy_loss = -tf.reduce_mean(
+            tf.minimum(ratio * advantage_buffer, min_advantage)
+        )
+    policy_grads = tape.gradient(policy_loss, actor_model.trainable_variables)
+    policy_optimizer.apply_gradients(zip(policy_grads, actor_model.trainable_variables))
+
+    action_opt, log_a_opt = actor_model(observation_buffer)
+    kl = tf.reduce_mean(
+        logprobability_buffer
+        - log_a_opt
+    )
+
+    kl = tf.reduce_sum(kl)
+    return kl
+
+def train_value_function(observation_buffer, return_buffer):
+    with tf.GradientTape() as tape:  # Record operations for automatic differentiation.
+        value_loss = tf.reduce_mean((return_buffer - critic_model(observation_buffer)) ** 2)
+    value_grads = tape.gradient(value_loss, critic_model.trainable_variables)
+    value_optimizer.apply_gradients(zip(value_grads, critic_model.trainable_variables))
+
 t_steps = 0
 RO_SIZE=1000 
 RO_index = 0
 
-while t_steps < 1000000:
+# Iterate over the number of epochs
+for epoch in range(epochs):
+    # Initialize the sum of the returns, lengths and number of episodes for each epoch
 
-    prev_state = env.reset()
+    # Iterate over the steps of each epoch
+    for t in range(steps_per_epoch):
+        if render:
+            env.render()
 
-    episodic_reward = 0
-
-    while True:
-        # env.render()
-
-        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
-
-        action, log_a = actor_model(tf_prev_state)
-
+        # Get the logits, action, and take one step in the environment
+        action, log_pi_a = actor_model(observation)
         action = action[0]
+        observation_new, reward, done, _ = env.step(action)
+        episode_return += reward
+        episode_length += 1
 
-        # Recieve state and reward from environment.
-        state, reward, done, info = env.step(action*upper_bound)
+        # Get the value and log-probability of the action
+        value_t = critic_model(observation)
 
-        if done:
-            end = 0
-        else:
-            end = 1
+        # Store obs, act, rew, v_t, logp_pi_t
+        buffer.store(observation, action, reward, value_t, log_pi_a)
 
-        buffer.record((prev_state, action, reward, state, end))
+        # Update the observation
+        observation = observation_new
 
-        episodic_reward += reward
+        # Finish trajectory if reached to a terminal state
+        terminal = done
+        if terminal or (t == steps_per_epoch - 1):
+            last_value = 0 if done else critic(observation)
+            buffer.finish_trajectory(last_value)
+            observation, episode_return, episode_length = env.reset(), 0, 0
 
-        buffer.learn()
+    # Get values from the buffer
+    (
+        observation_buffer,
+        action_buffer,
+        advantage_buffer,
+        return_buffer,
+        logprobability_buffer,
+    ) = buffer.get()
 
-        update_target(target_critic_1.variables, critic_model_1.variables, tau)
-        update_target(target_critic_2.variables, critic_model_2.variables, tau)
-        t_steps += 1
-
-        if t_steps%RO_SIZE == 0:
-
-            eval_prev_state = eval_env.reset()
-
-            eval_ep_reward = 0
-
-            while True:
-                # env.render()
-
-                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
-
-                eval_action, eval_log_a = actor_model(eval_tf_prev_state, eval_mode=True)
-
-                eval_action = eval_action[0]
-
-                # Recieve state and reward from environment.
-                eval_state, eval_reward, eval_done, info = eval_env.step(eval_action*upper_bound)
-
-                eval_ep_reward += eval_reward
-
-                if eval_done:
-                    break
-
-                eval_prev_state = eval_state
-
-            eval_ep_reward_list.append(eval_ep_reward)
-            eval_avg_reward = np.mean(eval_ep_reward_list)
-            print("Rollout * {} * Avg Reward is ==> {}".format(RO_index, eval_avg_reward), flush=True)
-            print("Rollout * {} * Epsiodic Reward is ==> {}".format(RO_index, eval_ep_reward), flush=True)
-            print("TOTAL STEPS: ", t_steps, flush=True)
-            eval_avg_reward_list.append(eval_avg_reward)
-            RO_index += 1 
-
-        # End this episode when `done` is True
-        if done:
+    # Update the policy and implement early stopping using KL divergence
+    for _ in range(train_policy_iterations):
+        kl = train_policy(
+            observation_buffer, action_buffer, logprobability_buffer, advantage_buffer
+        )
+        if kl > 1.5 * target_kl:
+            # Early Stopping
             break
 
-        prev_state = state
+    # Update the value function
+    for _ in range(train_value_iterations):
+        train_value_function(observation_buffer, return_buffer)
 
-    ep_reward_list.append(episodic_reward)
-
-    ep = ep + 1
+    # Print mean return and length for each epoch
+    print(
+        f" Epoch: {epoch + 1}. Mean Return: {sum_return / num_episodes}. Mean Length: {sum_length / num_episodes}"
+    )
 
 # Plotting graph
 # Episodes versus Avg. Rewards
