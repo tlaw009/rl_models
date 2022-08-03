@@ -72,6 +72,41 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
 #################### Auxiliaries ####################
 
+###########################
+#Observation normalization#
+###########################
+
+obs_upper = np.zeros(num_states)
+obs_lower = np.zeros(num_states)
+
+def obs_norm(state_batch):
+    if len(state_batch.shape) == 2:
+        norm_state_batch = []
+        for state in state_batch:
+            norm_state = np.zeros(num_states)
+            for i in range(num_states):
+                if state[i] > obs_upper[i]:
+                    obs_upper[i] = state[i]
+                if state[i] < obs_lower[i]:
+                    obs_lower[i] = state[i]
+                norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
+            norm_state_batch.append(norm_state)
+
+        return norm_state_batch
+    else: 
+        state = state_batch
+        norm_state = np.zeros(num_states)
+        for i in range(num_states):
+            if state[i] > obs_upper[i]:
+                obs_upper[i] = state[i]
+            if state[i] < obs_lower[i]:
+                obs_lower[i] = state[i]
+            norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
+
+        return norm_state
+
+print("State Normalization Initialized", flush=True)
+
 ##########*****####################*****##########
 
 
@@ -203,11 +238,11 @@ class Buffer:
         batch_indices = np.random.choice(record_range, self.batch_size)
 
         # Convert to tensors
-        state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
+        state_batch = tf.convert_to_tensor(obs_norm(self.state_buffer[batch_indices]))
         action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
         reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
         reward_batch = tf.cast(reward_batch, dtype=tf.float64)
-        next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
+        next_state_batch = tf.convert_to_tensor(obs_norm(self.next_state_buffer[batch_indices]))
         done_batch = tf.convert_to_tensor(self.done_buffer[batch_indices])
 
         self.update(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
@@ -236,13 +271,13 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        a1 = self.dense1_layer(state)
-        a2 = self.dense2_layer(a1)
-        mu = self.mean_layer(a2)
+        a1 = self.dense1_layer(state, training=not eval_mode)
+        a2 = self.dense2_layer(a1, training=not eval_mode)
+        mu = self.mean_layer(a2, training=not eval_mode)
 
         # Standard deviation is bounded by a constraint of being non-negative
         # therefore we produce log stdev as output which can be [-inf, inf]
-        log_sigma = self.stdev_layer(a2)
+        log_sigma = self.stdev_layer(a2, training=not eval_mode)
         sigma = tf.exp(log_sigma)
 
         covar_m = tf.linalg.diag(sigma**2)
@@ -250,20 +285,20 @@ class Actor(Model):
         # dist = tfp.distributions.Normal(mu, sigma)
         dist = tfp.distributions.MultivariateNormalTriL(loc=mu, scale_tril=tf.linalg.cholesky(covar_m))
         if eval_mode:
-            action = tf.tanh(mu)
-            log_pi = tf.constant(0, dtype='float64')
+            action_ = mu
         else:
             action_ = dist.sample()
-            # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
-            action = tf.tanh(action_)
 
-            # Calculate the log probability
-            log_pi_ = dist.log_prob(action_)
+        # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
+        action = tf.tanh(action_)
 
-            # Change log probability to account for tanh squashing as mentioned in
-            # Appendix C of the paper
-            log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
-                                        -1)        
+        # Calculate the log probability
+        log_pi_ = dist.log_prob(action_)
+
+        # Change log probability to account for tanh squashing as mentioned in
+        # Appendix C of the paper
+        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
+                                    -1)        
 
         return action*upper_bound, log_pi
 
@@ -323,7 +358,7 @@ gamma = 0.99
 # Used to update target networks
 tau = 0.005
 BATCH_SIZE = 256
-buffer = Buffer(100000, BATCH_SIZE)
+buffer = Buffer(1000000, BATCH_SIZE)
 
 
 # To store reward history of each episode
@@ -357,7 +392,7 @@ while t_steps < 1000000:
     while True:
         # env.render()
 
-        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
+        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(prev_state)), 0)
 
         action, log_a = actor_model(tf_prev_state)
 
@@ -403,7 +438,7 @@ while t_steps < 1000000:
             while True:
                 # eval_env.render()
 
-                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
+                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(eval_prev_state)), 0)
 
                 eval_action, eval_log_a = actor_model(eval_tf_prev_state, eval_mode=True)
 

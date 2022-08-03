@@ -37,6 +37,41 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
 #################### Auxiliaries ####################
 
+###########################
+#Observation normalization#
+###########################
+
+obs_upper = np.zeros(num_states)
+obs_lower = np.zeros(num_states)
+
+def obs_norm(state_batch):
+    if len(state_batch.shape) == 2:
+        norm_state_batch = []
+        for state in state_batch:
+            norm_state = np.zeros(num_states)
+            for i in range(num_states):
+                if state[i] > obs_upper[i]:
+                    obs_upper[i] = state[i]
+                if state[i] < obs_lower[i]:
+                    obs_lower[i] = state[i]
+                norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
+            norm_state_batch.append(norm_state)
+
+        return norm_state_batch
+    else: 
+        state = state_batch
+        norm_state = np.zeros(num_states)
+        for i in range(num_states):
+            if state[i] > obs_upper[i]:
+                obs_upper[i] = state[i]
+            if state[i] < obs_lower[i]:
+                obs_lower[i] = state[i]
+            norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
+
+        return norm_state
+
+print("State Normalization Initialized", flush=True)
+
 ##########*****####################*****##########
 
 
@@ -81,13 +116,13 @@ class Buffer:
         # Training and updating Actor & Critic networks.
         with tf.GradientTape() as tape1:
             # Get Q value estimates, action used here is from the replay buffer
-            q1 = critic_model_1([state_batch, action_batch], training=True)
+            q1 = critic_model_1([state_batch, action_batch])
             # Sample actions from the policy for next states
             pi_a, log_pi_a = actor_model(next_state_batch)
 
             # Get Q value estimates from target Q network
-            q1_target = target_critic_1([next_state_batch, pi_a], training=True)
-            q2_target = target_critic_2([next_state_batch, pi_a], training=True)
+            q1_target = target_critic_1([next_state_batch, pi_a])
+            q2_target = target_critic_2([next_state_batch, pi_a])
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
@@ -103,13 +138,13 @@ class Buffer:
 
         with tf.GradientTape() as tape2:
             # Get Q value estimates, action used here is from the replay buffer
-            q2 = critic_model_2([state_batch, action_batch], training=True)
+            q2 = critic_model_2([state_batch, action_batch])
             # Sample actions from the policy for next states
             pi_a, log_pi_a = actor_model(next_state_batch)
 
             # Get Q value estimates from target Q network
-            q1_target = target_critic_1([next_state_batch, pi_a], training=True)
-            q2_target = target_critic_2([next_state_batch, pi_a], training=True)
+            q1_target = target_critic_1([next_state_batch, pi_a])
+            q2_target = target_critic_2([next_state_batch, pi_a])
 
             # Apply the clipped double Q trick
             # Get the minimum Q value of the 2 target networks
@@ -136,8 +171,8 @@ class Buffer:
             # Sample actions from the policy for current states
             pi_a, log_pi_a = actor_model(state_batch)
 
-            q1 = critic_model_1([state_batch, pi_a], training=True)
-            q2 = critic_model_2([state_batch, pi_a], training=True)
+            q1 = critic_model_1([state_batch, pi_a])
+            q2 = critic_model_2([state_batch, pi_a])
 
             soft_q = tf.reduce_mean([q1, q2], axis = 0)
 
@@ -168,11 +203,11 @@ class Buffer:
         batch_indices = np.random.choice(record_range, self.batch_size)
 
         # Convert to tensors
-        state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
+        state_batch = tf.convert_to_tensor(obs_norm(self.state_buffer[batch_indices]))
         action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
         reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
         reward_batch = tf.cast(reward_batch, dtype=tf.float64)
-        next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
+        next_state_batch = tf.convert_to_tensor(obs_norm(self.next_state_buffer[batch_indices]))
         done_batch = tf.convert_to_tensor(self.done_buffer[batch_indices])
 
         self.update(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
@@ -194,7 +229,6 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.norm_layer = layers.BatchNormalization()
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
@@ -202,7 +236,6 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        state = self.norm_layer(state, training=not eval_mode)
         a1 = self.dense1_layer(state, training=not eval_mode)
         a2 = self.dense2_layer(a1, training=not eval_mode)
         mu = self.mean_layer(a2, training=not eval_mode)
@@ -237,7 +270,6 @@ class Actor(Model):
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_input = layers.BatchNormalization()(state_input)
     state_out = layers.Dense(128, activation="relu")(state_input)
     # state_out = layers.Dense(32, activation="relu")(state_out)
 
@@ -319,7 +351,7 @@ while t_steps < 3000000:
     while True:
         # env.render()
 
-        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
+        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(prev_state)), 0)
 
         action, log_a = actor_model(tf_prev_state)
 
@@ -352,7 +384,7 @@ while t_steps < 3000000:
             while True:
                 # eval_env.render()
 
-                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
+                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(eval_prev_state)), 0)
 
                 eval_action, eval_log_a = actor_model(eval_tf_prev_state, eval_mode=True)
 
