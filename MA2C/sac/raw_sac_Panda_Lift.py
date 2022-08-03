@@ -72,41 +72,6 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
 #################### Auxiliaries ####################
 
-###########################
-#Observation normalization#
-###########################
-
-obs_upper = np.zeros(num_states)
-obs_lower = np.zeros(num_states)
-
-def obs_norm(state_batch):
-    if len(state_batch.shape) == 2:
-        norm_state_batch = []
-        for state in state_batch:
-            norm_state = np.zeros(num_states)
-            for i in range(num_states):
-                if state[i] > obs_upper[i]:
-                    obs_upper[i] = state[i]
-                if state[i] < obs_lower[i]:
-                    obs_lower[i] = state[i]
-                norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
-            norm_state_batch.append(norm_state)
-
-        return norm_state_batch
-    else: 
-        state = state_batch
-        norm_state = np.zeros(num_states)
-        for i in range(num_states):
-            if state[i] > obs_upper[i]:
-                obs_upper[i] = state[i]
-            if state[i] < obs_lower[i]:
-                obs_lower[i] = state[i]
-            norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
-
-        return norm_state
-
-print("State Normalization Initialized", flush=True)
-
 ##########*****####################*****##########
 
 
