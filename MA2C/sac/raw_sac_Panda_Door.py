@@ -76,6 +76,13 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
 #################### Auxiliaries ####################
 
+###########################
+#Observation normalization#
+###########################
+
+obs_upper = np.zeros(num_states)
+obs_lower = np.zeros(num_states)
+
 def obs_norm(state_batch):
     if len(state_batch.shape) == 2:
         norm_state_batch = []
