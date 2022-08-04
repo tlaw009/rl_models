@@ -259,13 +259,13 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        a1 = self.dense1_layer(state, training=not eval_mode)
-        a2 = self.dense2_layer(a1, training=not eval_mode)
-        mu = self.mean_layer(a2, training=not eval_mode)
+        a1 = self.dense1_layer(state)
+        a2 = self.dense2_layer(a1)
+        mu = self.mean_layer(a2)
 
         # Standard deviation is bounded by a constraint of being non-negative
         # therefore we produce log stdev as output which can be [-inf, inf]
-        log_sigma = self.stdev_layer(a2, training=not eval_mode)
+        log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
         covar_m = tf.linalg.diag(sigma**2)

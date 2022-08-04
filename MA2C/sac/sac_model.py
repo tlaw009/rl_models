@@ -9,17 +9,18 @@ import json
 import random
 import tensorflow_probability as tfp
 from tensorflow.keras import regularizers
+from gym.envs.mujoco.hopper import HopperEnv
 
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
 
-EPSILON = 1e-16
+EPSILON = 1e-32
 
 ################## GLOBAL SETUP P1 ##################
 
 problem = "Hopper-v2"
-env = gym.make(problem).env
-eval_env = gym.make(problem).env
+env = HopperEnv()
+eval_env = HopperEnv()
 
 num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states), flush=True)
@@ -235,13 +236,13 @@ class Actor(Model):
 
     def call(self, state, eval_mode=False):
         # Get mean and standard deviation from the policy network
-        a1 = self.dense1_layer(state, training=not eval_mode)
-        a2 = self.dense2_layer(a1, training=not eval_mode)
-        mu = self.mean_layer(a2, training=not eval_mode)
+        a1 = self.dense1_layer(state)
+        a2 = self.dense2_layer(a1)
+        mu = self.mean_layer(a2)
 
         # Standard deviation is bounded by a constraint of being non-negative
         # therefore we produce log stdev as output which can be [-inf, inf]
-        log_sigma = self.stdev_layer(a2, training=not eval_mode)
+        log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
         covar_m = tf.linalg.diag(sigma**2)
@@ -255,7 +256,6 @@ class Actor(Model):
 
         # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
         action = tf.tanh(action_)
-
         # Calculate the log probability
         log_pi_ = dist.log_prob(action_)
 
