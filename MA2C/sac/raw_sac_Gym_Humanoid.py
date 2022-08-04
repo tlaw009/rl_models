@@ -13,7 +13,7 @@ from tensorflow.keras import regularizers
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
 
-EPSILON = 1e-32
+EPSILON = 1e-64
 
 ################## GLOBAL SETUP P1 ##################
 
