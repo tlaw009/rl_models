@@ -18,8 +18,8 @@ EPSILON = 1e-16
 ################## GLOBAL SETUP P1 ##################
 
 problem = "Hopper-v2"
-env = gym.make(problem)
-eval_env = gym.make(problem)
+env = gym.make(problem).env
+eval_env = gym.make(problem).env
 
 num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states), flush=True)
