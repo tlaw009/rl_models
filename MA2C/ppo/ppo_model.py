@@ -5,17 +5,24 @@ from tensorflow.keras import layers
 import gym
 import scipy.signal
 import time
+from tensorflow.keras import Model
+import matplotlib.pyplot as plt
+import os
+import json
+import random
+import tensorflow_probability as tfp
+from tensorflow.keras import regularizers
+from gym.envs.mujoco.hopper import HopperEnv
 
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
 
-EPSILON = 1e-16
+EPSILON = 1e-32
 
 ################## GLOBAL SETUP P1 ##################
 
-problem = "Hopper-v2"
-env = gym.make(problem)
-eval_env = gym.make(problem)
+env = HopperEnv()
+eval_env = HopperEnv()
 
 num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states), flush=True)
@@ -153,20 +160,13 @@ class Actor(Model):
 def get_critic():
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_out = layers.Dense(128, activation="relu")(state_input)
-    # state_out = layers.Dense(32, activation="relu")(state_out)
+    state_out = layers.Dense(256, activation="relu")(state_input)
 
-    # Action as input
-    action_input = layers.Input(shape=(num_actions))
-    action_out = layers.Dense(128, activation="relu")(action_input)
-
-    # Concatenating
-    concat = layers.Concatenate()([state_out, action_out])
-    out = layers.Dense(256, activation="relu")(concat)
+    out = layers.Dense(256, activation="relu")(state_out)
     outputs = layers.Dense(1, dtype='float64')(out)
 
     # Outputs single value for give state-action
-    model = tf.keras.Model([state_input, action_input], outputs)
+    model = tf.keras.Model(state_input, outputs)
 
     return model
 
@@ -215,6 +215,7 @@ eval_avg_reward_list = []
 #################### Training ####################
 
 observation, episode_return, episode_length = env.reset(), 0, 0
+tf_observation = tf.expand_dims(observation, 0)
 
 def train_policy(
     observation_buffer, action_buffer, logprobability_buffer, advantage_buffer
@@ -230,7 +231,8 @@ def train_policy(
             (1 + clip_ratio) * advantage_buffer,
             (1 - clip_ratio) * advantage_buffer,
         )
-
+        print("R*AB: ", ratio * advantage_buffer)
+        print("MA: ", min_advantage)
         policy_loss = -tf.reduce_mean(
             tf.minimum(ratio * advantage_buffer, min_advantage)
         )
@@ -266,27 +268,28 @@ for epoch in range(epochs):
             env.render()
 
         # Get the logits, action, and take one step in the environment
-        action, log_pi_a = actor_model(observation)
+        action, log_pi_a = actor_model(tf_observation)
         action = action[0]
         observation_new, reward, done, _ = env.step(action)
         episode_return += reward
         episode_length += 1
 
         # Get the value and log-probability of the action
-        value_t = critic_model(observation)
+        value_t = critic_model(tf_observation)
 
         # Store obs, act, rew, v_t, logp_pi_t
         buffer.store(observation, action, reward, value_t, log_pi_a)
 
         # Update the observation
         observation = observation_new
-
+        tf_observation = tf.expand_dims(observation, 0)
         # Finish trajectory if reached to a terminal state
         terminal = done
         if terminal or (t == steps_per_epoch - 1):
-            last_value = 0 if done else critic(observation)
+            last_value = 0 if done else critic_model(tf_observation)
             buffer.finish_trajectory(last_value)
             observation, episode_return, episode_length = env.reset(), 0, 0
+            tf_observation = tf.expand_dims(observation, 0)
 
     # Get values from the buffer
     # (

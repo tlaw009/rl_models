@@ -9,7 +9,6 @@ import json
 import random
 import tensorflow_probability as tfp
 from tensorflow.keras import regularizers
-from gym.envs.mujoco.hopper import HopperEnv
 
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
@@ -19,8 +18,8 @@ EPSILON = 1e-32
 ################## GLOBAL SETUP P1 ##################
 
 problem = "Hopper-v2"
-env = HopperEnv()
-eval_env = HopperEnv()
+env = gym.make(problem)
+eval_env = gym.make(problem)
 
 num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states), flush=True)

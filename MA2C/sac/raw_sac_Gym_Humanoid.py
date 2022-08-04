@@ -13,13 +13,13 @@ from tensorflow.keras import regularizers
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
 
-EPSILON = 1e-16
+EPSILON = 1e-32
 
 ################## GLOBAL SETUP P1 ##################
 
 problem = "Humanoid-v2"
-env = gym.make(problem).env
-eval_env = gym.make(problem).env
+env = gym.make(problem)
+eval_env = gym.make(problem)
 
 num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states), flush=True)
