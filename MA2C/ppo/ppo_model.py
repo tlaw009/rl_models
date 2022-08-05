@@ -175,14 +175,14 @@ def get_critic():
 #################### GLOBAL SETUP P2 ####################
 
 # Hyperparameters of the PPO algorithm
-steps_per_epoch = 2000
-epochs = 500
+horizon = 2000
+iterations = 500
 gamma = 0.99
 clip_ratio = 0.2
-train_iterations = 500
+epochs = 10
 lam = 0.97
 target_kl = 0.01
-
+beta = 3.0
 # True if you want to render the environment
 render = False
 
@@ -202,7 +202,7 @@ policy_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
 
 value_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
 
-buffer = Buffer(num_states, num_actions, steps_per_epoch)
+buffer = Buffer(num_states, num_actions, horizon)
 
 
 # To store reward history of each episode
@@ -234,7 +234,8 @@ def train_policy(
             (1 - clip_ratio) * advantage_buffer,
         )
 
-        policy_loss = -tf.minimum(ratio * advantage_buffer, min_advantage)
+        _kl = -beta*(logprobability_buffer - log_a)
+        policy_loss = -tf.reduce_mean(tf.math.add(tf.minimum(ratio * advantage_buffer, min_advantage), _kl))
 
     policy_grads = tape.gradient(policy_loss, actor_model.trainable_variables)
     policy_optimizer.apply_gradients(zip(policy_grads, actor_model.trainable_variables))
@@ -245,6 +246,11 @@ def train_policy(
         - log_a_opt
     )
 
+    if kl < target_kl/1.5:
+        beta = beta/2
+    if kl > target_kl*1.5:
+        beta = beta*2
+        
     return kl
 
 def train_value_function(observation_buffer, return_buffer):
@@ -258,17 +264,18 @@ RO_SIZE=1000
 RO_index = 0
 
 # Iterate over the number of epochs
-for epoch in range(epochs):
+for ite in range(iterations):
     # Initialize the sum of the returns, lengths and number of episodes for each epoch
 
     # Iterate over the steps of each epoch
-    for t in range(steps_per_epoch):
+    for t in range(horizon):
         if render:
             env.render()
 
         # Get the logits, action, and take one step in the environment
         action, log_pi_a = actor_model(tf_observation)
         action = action[0]
+
         observation_new, reward, done, _ = env.step(action)
         episode_return += reward
         episode_length += 1
@@ -284,7 +291,7 @@ for epoch in range(epochs):
         tf_observation = tf.expand_dims(observation, 0)
         # Finish trajectory if reached to a terminal state
         terminal = done
-        if terminal or (t == steps_per_epoch - 1):
+        if terminal or (t == horizon - 1):
             last_value = 0 if done else critic_model(tf_observation)
             buffer.finish_trajectory(last_value)
             observation, episode_return, episode_length = env.reset(), 0, 0
@@ -300,7 +307,7 @@ for epoch in range(epochs):
     # ) = buffer.get()
 
     # Update the policy and implement early stopping using KL divergence
-    for _ in range(train_iterations):
+    for _ in range(epochs):
 
         (
             observation_buffer,
@@ -347,9 +354,7 @@ for epoch in range(epochs):
             print("TOTAL STEPS: ", t_steps, flush=True)
             eval_avg_reward_list.append(eval_avg_reward)
             RO_index += 1 
-        # if kl > 1.5 * target_kl:
-        #     # Early Stopping
-        #     break
+
     buffer.clear()
     # Update the value function
 
