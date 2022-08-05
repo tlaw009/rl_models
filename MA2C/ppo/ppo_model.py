@@ -96,17 +96,17 @@ class Buffer:
 
     def get(self):
         # Get all data of the buffer and normalize the advantages
-        rindex = np.random.randint(0, self.pointer - minibatch_size)
+        rindex = np.random.choice(self.pointer, minibatch_size)
         advantage_mean, advantage_std = (
-            np.mean(self.advantage_buffer[rindex:rindex+minibatch_size]),
-            np.std(self.advantage_buffer[rindex:rindex+minibatch_size]),
+            np.mean(self.advantage_buffer[rindex]),
+            np.std(self.advantage_buffer[rindex]),
         )
         return (
-            self.observation_buffer[rindex:rindex+minibatch_size],
-            self.action_buffer[rindex:rindex+minibatch_size],
-            (self.advantage_buffer[rindex:rindex+minibatch_size] - advantage_mean) / advantage_std,
-            self.return_buffer[rindex:rindex+minibatch_size],
-            self.logprobability_buffer[rindex:rindex+minibatch_size],
+            self.observation_buffer[rindex],
+            self.action_buffer[rindex],
+            (self.advantage_buffer[rindex] - advantage_mean) / advantage_std,
+            self.return_buffer[rindex],
+            self.logprobability_buffer[rindex],
         )
     def clear(self):
         self.pointer, self.trajectory_start_index = 0, 0
@@ -175,11 +175,11 @@ def get_critic():
 #################### GLOBAL SETUP P2 ####################
 
 # Hyperparameters of the PPO algorithm
-horizon = 2000
-iterations = 100000
+horizon = 512
+iterations = 40000
 gamma = 0.99
 clip_ratio = 0.2
-epochs = 10
+epochs = 25
 lam = 0.97
 target_kl = 0.01
 beta = 1.0
