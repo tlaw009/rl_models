@@ -176,13 +176,13 @@ def get_critic():
 
 # Hyperparameters of the PPO algorithm
 horizon = 2000
-iterations = 500
+iterations = 100000
 gamma = 0.99
 clip_ratio = 0.2
 epochs = 10
 lam = 0.97
 target_kl = 0.01
-beta = 3.0
+beta = 1.0
 # True if you want to render the environment
 render = False
 
@@ -220,7 +220,7 @@ tf_observation = tf.expand_dims(observation, 0)
 def train_policy(
     observation_buffer, action_buffer, logprobability_buffer, advantage_buffer
 ):
-    
+    global beta
     with tf.GradientTape() as tape:  # Record operations for automatic differentiation.
         action, log_a = actor_model(observation_buffer)
         ratio = tf.exp(
@@ -234,8 +234,8 @@ def train_policy(
             (1 - clip_ratio) * advantage_buffer,
         )
 
-        _kl = -beta*(logprobability_buffer - log_a)
-        policy_loss = -tf.reduce_mean(tf.math.add(tf.minimum(ratio * advantage_buffer, min_advantage), _kl))
+        _kl = -beta*tf.math.reduce_mean(logprobability_buffer - log_a)
+        policy_loss = -tf.reduce_mean(tf.minimum(ratio * advantage_buffer, min_advantage) + _kl)
 
     policy_grads = tape.gradient(policy_loss, actor_model.trainable_variables)
     policy_optimizer.apply_gradients(zip(policy_grads, actor_model.trainable_variables))
@@ -250,7 +250,7 @@ def train_policy(
         beta = beta/2
     if kl > target_kl*1.5:
         beta = beta*2
-        
+
     return kl
 
 def train_value_function(observation_buffer, return_buffer):
@@ -277,6 +277,7 @@ for ite in range(iterations):
         action = action[0]
 
         observation_new, reward, done, _ = env.step(action)
+
         episode_return += reward
         episode_length += 1
 
@@ -289,6 +290,7 @@ for ite in range(iterations):
         # Update the observation
         observation = observation_new
         tf_observation = tf.expand_dims(observation, 0)
+
         # Finish trajectory if reached to a terminal state
         terminal = done
         if terminal or (t == horizon - 1):
@@ -322,8 +324,9 @@ for ite in range(iterations):
         )
 
         train_value_function(observation_buffer, return_buffer)
+
         t_steps += 1
-        print("T: ", t_steps)
+        # print("T: ", t_steps)
         if t_steps%RO_SIZE == 0:
             eval_prev_state = eval_env.reset()
             eval_ep_reward = 0
