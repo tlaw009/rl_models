@@ -16,10 +16,13 @@ tf.keras.backend.set_floatx('float64')
 EPSILON = 1e-64
 
 ################## GLOBAL SETUP P1 ##################
-
+rand_seed = 1995
 problem = "Hopper-v2"
 env = gym.make(problem)
 eval_env = gym.make(problem)
+
+env.seed(rand_seed)
+eval_env.seed(rand_seed)
 
 num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states), flush=True)
