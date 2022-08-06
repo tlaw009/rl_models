@@ -335,10 +335,10 @@ lr = 0.0003
 # critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 # actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 
-alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=100.0)
-critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=100.0)
-critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=100.0)
-actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=100.0)
+alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=1.0)
+critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=1.0)
+critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=1.0)
+actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=1.0)
 
 total_episodes = 5000
 # Discount factor for future rewards
