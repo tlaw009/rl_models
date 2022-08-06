@@ -13,7 +13,7 @@ from tensorflow.keras import regularizers
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
 
-EPSILON = 1e-64
+EPSILON = 1e-10
 
 ################## GLOBAL SETUP P1 ##################
 rand_seed = 1929
@@ -263,7 +263,7 @@ class Actor(Model):
 
         # Change log probability to account for tanh squashing as mentioned in
         # Appendix C of the paper
-        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
+        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(tf.clip_by_value(1 - action**2, EPSILON, 1.0)), axis=1),
                                     -1)        
 
         return action*upper_bound, log_pi
@@ -313,10 +313,10 @@ lr = 0.0003
 # critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 # actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 
-alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.1)
+critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.1)
+critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.1)
+actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.1)
 
 total_episodes = 5000
 # Discount factor for future rewards

@@ -13,11 +13,11 @@ from tensorflow.keras import regularizers
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
 
-EPSILON = 1e-64
+EPSILON = 1e-10
 
 ################## GLOBAL SETUP P1 ##################
 
-problem = "HalfCheetah-v2"
+problem = "Humanoid-v2"
 env = gym.make(problem)
 eval_env = gym.make(problem)
 
@@ -72,6 +72,31 @@ def obs_norm(state_batch):
 
 print("State Normalization Initialized", flush=True)
 
+# obs_upper = tf.zeros(num_states, dtype='float64')
+# obs_lower = tf.zeros(num_states, dtype='float64')
+
+# def obs_norm(state_batch):
+#     global obs_upper, obs_lower
+
+#     state_batch_unstacked = tf.unstack(state_batch)
+#     norm_batch_non_tf = []
+#     for state in state_batch_unstacked:
+#         norm_state = tf.zeros(num_states, dtype='float64')
+#         for i in range(num_states):
+#             if state[i] > obs_upper[i]:
+#                 obs_upper = tf.tensor_scatter_nd_update(obs_upper, [[i]], [state[i]])
+#                 # obs_upper[i] =  state[i]
+#             if state[i] < obs_lower[i]:
+#                 obs_lower = tf.tensor_scatter_nd_update(obs_lower, [[i]], [state[i]])
+#                 # obs_lower[i] = state[i]
+#             norm_state = tf.tensor_scatter_nd_update(norm_state, [[i]], [state[i]/(obs_upper[i] - obs_lower[i] + EPSILON)])
+#             # norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i] + EPSILON)
+#         norm_batch_non_tf.append(norm_state)
+
+#     return tf.stack(norm_batch_non_tf)
+
+# print("State Normalization Initialized", flush=True)
+
 ##########*****####################*****##########
 
 
@@ -112,7 +137,6 @@ class Buffer:
     def update(
         self, state_batch, action_batch, reward_batch, next_state_batch, done_batch
     ):
-
         # Training and updating Actor & Critic networks.
         with tf.GradientTape() as tape1:
             # Get Q value estimates, action used here is from the replay buffer
@@ -165,7 +189,6 @@ class Buffer:
         grads2 = tape2.gradient(critic2_loss, critic_model_2.trainable_variables)
         critic2_optimizer.apply_gradients(zip(grads2,
                                                    critic_model_2.trainable_variables))
-
 
         with tf.GradientTape() as tape3:
             # Sample actions from the policy for current states
@@ -262,7 +285,7 @@ class Actor(Model):
 
         # Change log probability to account for tanh squashing as mentioned in
         # Appendix C of the paper
-        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
+        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(tf.clip_by_value(1 - action**2, EPSILON, 1.0)), axis=1),
                                     -1)        
 
         return action*upper_bound, log_pi
@@ -312,10 +335,10 @@ lr = 0.0003
 # critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 # actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 
-alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.1)
+critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.1)
+critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.1)
+actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.1)
 
 total_episodes = 5000
 # Discount factor for future rewards
@@ -339,7 +362,7 @@ t_steps = 0
 RO_SIZE=1000 
 RO_index = 0
 
-while t_steps < 3000000:
+while t_steps < 10000000:
 
     prev_state = env.reset()
 
