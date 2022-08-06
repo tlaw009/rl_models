@@ -16,7 +16,7 @@ tf.keras.backend.set_floatx('float64')
 EPSILON = 1e-64
 
 ################## GLOBAL SETUP P1 ##################
-rand_seed = 1995
+rand_seed = 1929
 problem = "Hopper-v2"
 env = gym.make(problem)
 eval_env = gym.make(problem)
