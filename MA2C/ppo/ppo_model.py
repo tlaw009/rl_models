@@ -16,7 +16,7 @@ from gym.envs.mujoco.hopper import HopperEnv
 
 tf.keras.backend.set_floatx('float32')
 
-EPSILON = 1e-64
+EPSILON = 1e-10
 
 ################## GLOBAL SETUP P1 ##################
 
@@ -35,7 +35,7 @@ lower_bound = env.action_space.low[0]
 print("Max Value of Action ->  {}".format(upper_bound), flush=True)
 print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
-minibatch_size = 64
+minibatch_size = 256
 
 ##########*****####################*****##########
 
@@ -145,7 +145,7 @@ class Actor(Model):
 
         log_pi_ = dist.log_prob(action_)
 
-        log_pi = log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1)     
+        log_pi = log_pi_ - tf.reduce_sum(tf.math.log(tf.clip_by_value(1 - action**2, EPSILON, 1.0)), axis=1)     
 
         return action*upper_bound, log_pi
 
@@ -166,10 +166,10 @@ def get_critic():
 
 # Hyperparameters of the PPO algorithm
 horizon = 2048
-iterations = 40000
+iterations = 2000
 gamma = 0.99
 clip_ratio = 0.2
-epochs = 10
+epochs = 500
 lam = 0.97
 target_kl = 0.01
 beta = 1.0
@@ -180,9 +180,9 @@ critic_model = get_critic()
 
 lr = 0.0003
 
-policy_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+policy_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.1)
 
-value_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+value_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.1)
 
 buffer = Buffer(num_states, num_actions, horizon)
 
@@ -209,15 +209,10 @@ def train_policy(
             log_a
             - logprobability_buffer
         )
-        # c_ratio = None
-        min_advantage = tf.where(
-            advantage_buffer > 0,
-            (1 + clip_ratio) * advantage_buffer,
-            (1 - clip_ratio) * advantage_buffer,
-        )
+        cd_ratio = tf.clip_by_value(ratio, (1 - clip_ratio), (1 + clip_ratio))
 
         _kl = -beta*tf.math.reduce_max(logprobability_buffer - log_a)
-        policy_loss = -tf.reduce_mean(tf.minimum(ratio * advantage_buffer, min_advantage) + _kl)
+        policy_loss = -tf.reduce_mean(tf.minimum(ratio * advantage_buffer, cd_ratio * advantage_buffer) + _kl)
 
     policy_grads = tape.gradient(policy_loss, actor_model.trainable_variables)
     policy_optimizer.apply_gradients(zip(policy_grads, actor_model.trainable_variables))

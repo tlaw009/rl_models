@@ -7,12 +7,8 @@ import scipy.signal
 import time
 from tensorflow.keras import Model
 import matplotlib.pyplot as plt
-import os
-import json
 import random
 import tensorflow_probability as tfp
-from tensorflow.keras import regularizers
-from gym.envs.mujoco.hopper import HopperEnv
 
 tf.keras.backend.set_floatx('float32')
 
@@ -165,8 +161,8 @@ def get_critic():
 #################### GLOBAL SETUP P2 ####################
 
 # Hyperparameters of the PPO algorithm
-horizon = 500
-iterations = 1000
+horizon = 2048
+iterations = 2000
 gamma = 0.99
 clip_ratio = 0.2
 epochs = 500
@@ -181,12 +177,12 @@ critic_model = get_critic()
 lr = 0.0003
 
 policy_optimizer = tf.keras.optimizers.Adam(learning_rate=lr,
-                                                            )
-                                                # clipvalue=1.0)
+                                                            # )
+                                                clipnorm=1.0)
 
 value_optimizer = tf.keras.optimizers.Adam(learning_rate=lr,
-                                                            )
-                                                # clipvalue=1.0)
+                                                            # )
+                                                clipnorm=1.0)
 
 buffer = Buffer(num_states, num_actions, horizon)
 
@@ -205,23 +201,19 @@ def train_policy(
     global beta
     with tf.GradientTape() as tape:  # Record operations for automatic differentiation.
         action, log_a = actor_model(observation_buffer)
-        print("A: ", tf.reduce_mean(action))
-        print("LOG_A: ", tf.reduce_mean(log_a))
+        # print("A: ", tf.reduce_mean(action))
+        # print("LOG_A: ", tf.reduce_mean(log_a))
         ratio = tf.exp(
             log_a
             - logprobability_buffer
         )
-        print("R: ", tf.reduce_mean(ratio), flush=True)
-        # c_ratio = None
-        min_advantage = tf.where(
-            advantage_buffer > 0,
-            (1 + clip_ratio) * advantage_buffer,
-            (1 - clip_ratio) * advantage_buffer,
-        )
+        # print("R: ", tf.reduce_mean(ratio), flush=True)
+        cd_ratio = tf.clip_by_value(ratio, (1 - clip_ratio), (1 + clip_ratio))
+        min_advantage = cd_ratio * advantage_buffer
 
         _kl = -beta*tf.math.reduce_max(logprobability_buffer - log_a)
         policy_loss = -tf.reduce_mean(tf.minimum(ratio * advantage_buffer, min_advantage) + _kl)
-        print("LOSS: ", policy_loss)
+        # print("LOSS: ", policy_loss)
     policy_grads = tape.gradient(policy_loss, actor_model.trainable_variables)
     policy_optimizer.apply_gradients(zip(policy_grads, actor_model.trainable_variables))
     # print("GRAD: ", policy_grads[0], flush=True)
@@ -301,20 +293,3 @@ for ite in range(iterations):
 
 
 ##########*****####################*****##########
-
-####################Loss before NaN#####################
-
-# tf.Tensor(0.2181576, shape=(), dtype=float32)
-# tf.Tensor(0.1889435, shape=(), dtype=float32)
-# tf.Tensor(-0.04418509, shape=(), dtype=float32)
-# tf.Tensor(0.0629648, shape=(), dtype=float32)
-# tf.Tensor(0.17935935, shape=(), dtype=float32)
-# tf.Tensor(-0.04629019, shape=(), dtype=float32)
-# tf.Tensor(0.17438054, shape=(), dtype=float32)
-# tf.Tensor(0.031371567, shape=(), dtype=float32)
-# tf.Tensor(0.020767871, shape=(), dtype=float32)
-# tf.Tensor(-0.00432986, shape=(), dtype=float32)
-# tf.Tensor(0.1378177, shape=(), dtype=float32)
-# tf.Tensor(0.019980386, shape=(), dtype=float32)
-# tf.Tensor(0.21751454, shape=(), dtype=float32)
-# tf.Tensor(nan, shape=(), dtype=float32)
