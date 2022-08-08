@@ -17,7 +17,7 @@ from robosuite.utils.mjcf_utils import postprocess_model_xml
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
 
-EPSILON = 1e-64
+EPSILON = 1e-10
 
 ################## GLOBAL SETUP P1 ##################
 

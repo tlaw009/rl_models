@@ -247,6 +247,8 @@ class Actor(Model):
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
+        sigma = tf.clip_by_value(sigma, 0, tf.exp(1))
+
         covar_m = tf.linalg.diag(sigma**2)
 
         # dist = tfp.distributions.Normal(mu, sigma)
