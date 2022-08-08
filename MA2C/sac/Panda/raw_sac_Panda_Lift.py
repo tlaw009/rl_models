@@ -17,7 +17,7 @@ from robosuite.utils.mjcf_utils import postprocess_model_xml
 tf.keras.backend.set_floatx('float64')
 # ref: https://github.com/shakti365/soft-actor-critic/blob/master/src/sac.py
 
-EPSILON = 1e-16
+EPSILON = 1e-64
 
 ################## GLOBAL SETUP P1 ##################
 
@@ -67,11 +67,28 @@ lower_bound = env.action_spec[0][0]
 print("Max Value of Action ->  {}".format(upper_bound), flush=True)
 print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 
+NaN_found = False
+train_log = []
+log_len = 24
+log_index = 0
 
 ##########*****####################*****##########
 
 #################### Auxiliaries ####################
+def training_log(data):
+    global NaN_found, train_log, log_len, log_index
 
+    if not NaN_found:
+        if len(train_log) == log_len:
+            train_log[log_index] = data
+
+        if len(train_log) < log_len:
+            train_log.append(data)
+            
+        log_index = (log_index+1)%log_len
+        if True in tf.math.is_nan(data):
+            NaN_found = True
+            print("TRAINING INFO: ", train_log, flush=True)
 ###########################
 #Observation normalization#
 ###########################
@@ -220,6 +237,8 @@ class Buffer:
                                     )
         actor_optimizer.apply_gradients(zip(grads3, variables3))
 
+        training_log([tf.reduce_mean(pi_a), tf.reduce_mean(log_pi_a), tf.reduce_mean(actor_loss), tf.reduce_mean(grads3[0])])
+
         with tf.GradientTape() as tape4:
             # Sample actions from the policy for current states
             pi_a, log_pi_a = actor_model(state_batch)
@@ -297,7 +316,7 @@ class Actor(Model):
 
         # Change log probability to account for tanh squashing as mentioned in
         # Appendix C of the paper
-        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(1 - action**2 + EPSILON), axis=1),
+        log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(tf.clip_by_value(1 - action**2, EPSILON, 1.0)), axis=1),
                                     -1)        
 
         return action*upper_bound, log_pi
