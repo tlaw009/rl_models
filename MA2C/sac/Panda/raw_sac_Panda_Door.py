@@ -249,7 +249,7 @@ class Buffer:
                                  # unconnected_gradients=tf.UnconnectedGradients.ZERO)
                                     )
         actor_optimizer.apply_gradients(zip(grads3, variables3))
-        
+
         training_log([tf.reduce_mean(pi_a), tf.reduce_mean(log_pi_a), tf.reduce_mean(actor_loss)
                     , tf.reduce_mean(grads3[0]),tf.reduce_mean(alpha), tf.reduce_mean(soft_q)])
 
@@ -313,6 +313,8 @@ class Actor(Model):
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
+        sigma = tf.clip_by_value(sigma, 0.0, 2.718)
+        
         covar_m = tf.linalg.diag(sigma**2)
 
         # dist = tfp.distributions.Normal(mu, sigma)

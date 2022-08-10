@@ -16,10 +16,13 @@ tf.keras.backend.set_floatx('float64')
 EPSILON = 1e-10
 
 ################## GLOBAL SETUP P1 ##################
-
+rand_seed = 1929
 problem = "Humanoid-v2"
 env = gym.make(problem)
 eval_env = gym.make(problem)
+
+env.seed(rand_seed)
+eval_env.seed(rand_seed)
 
 num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states), flush=True)
@@ -36,6 +39,33 @@ print("Min Value of Action ->  {}".format(lower_bound), flush=True)
 ##########*****####################*****##########
 
 #################### Auxiliaries ####################
+NaN_found = False
+train_log = []
+log_len = 24
+log_index = 0
+
+def training_log(data):
+    global NaN_found, train_log, log_len, log_index
+
+    if not NaN_found:
+        if len(train_log) == log_len:
+            train_log[log_index] = data
+
+        if len(train_log) < log_len:
+            train_log.append(data)
+            
+        log_index = (log_index+1)%log_len
+        if True in tf.math.is_nan(data):
+            NaN_found = True
+            for x in train_log:
+                print("*********************", flush=True)
+                print("A: ", x[0], flush=True)
+                print("LOG_A: ", x[1], flush=True)
+                print("POLICY_LOSS: ", x[2], flush=True)
+                print("FIRST_LAYER_GRAD: ", x[3], flush=True)
+                print("ALPHA: ", x[4], flush=True)
+                print("SOFT_Q: ", x[5], flush=True)
+                print("*********************", flush=True)
 
 ###########################
 #Observation normalization#
@@ -71,31 +101,6 @@ def obs_norm(state_batch):
         return norm_state
 
 print("State Normalization Initialized", flush=True)
-
-# obs_upper = tf.zeros(num_states, dtype='float64')
-# obs_lower = tf.zeros(num_states, dtype='float64')
-
-# def obs_norm(state_batch):
-#     global obs_upper, obs_lower
-
-#     state_batch_unstacked = tf.unstack(state_batch)
-#     norm_batch_non_tf = []
-#     for state in state_batch_unstacked:
-#         norm_state = tf.zeros(num_states, dtype='float64')
-#         for i in range(num_states):
-#             if state[i] > obs_upper[i]:
-#                 obs_upper = tf.tensor_scatter_nd_update(obs_upper, [[i]], [state[i]])
-#                 # obs_upper[i] =  state[i]
-#             if state[i] < obs_lower[i]:
-#                 obs_lower = tf.tensor_scatter_nd_update(obs_lower, [[i]], [state[i]])
-#                 # obs_lower[i] = state[i]
-#             norm_state = tf.tensor_scatter_nd_update(norm_state, [[i]], [state[i]/(obs_upper[i] - obs_lower[i] + EPSILON)])
-#             # norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i] + EPSILON)
-#         norm_batch_non_tf.append(norm_state)
-
-#     return tf.stack(norm_batch_non_tf)
-
-# print("State Normalization Initialized", flush=True)
 
 ##########*****####################*****##########
 
@@ -208,6 +213,9 @@ class Buffer:
                                     )
         actor_optimizer.apply_gradients(zip(grads3, variables3))
 
+        training_log([tf.reduce_mean(pi_a), tf.reduce_mean(log_pi_a), tf.reduce_mean(actor_loss)
+            , tf.reduce_mean(grads3[0]),tf.reduce_mean(alpha), tf.reduce_mean(soft_q)])
+
         with tf.GradientTape() as tape4:
             # Sample actions from the policy for current states
             pi_a, log_pi_a = actor_model(state_batch)
@@ -226,11 +234,16 @@ class Buffer:
         batch_indices = np.random.choice(record_range, self.batch_size)
 
         # Convert to tensors
-        state_batch = tf.convert_to_tensor(obs_norm(self.state_buffer[batch_indices]))
+        state_batch = tf.convert_to_tensor(
+                                            obs_norm(self.state_buffer[batch_indices]))
+                                            # self.state_buffer[batch_indices])
         action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
         reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
         reward_batch = tf.cast(reward_batch, dtype=tf.float64)
-        next_state_batch = tf.convert_to_tensor(obs_norm(self.next_state_buffer[batch_indices]))
+        next_state_batch = tf.convert_to_tensor(
+                                            obs_norm(self.next_state_buffer[batch_indices]))
+                                            # self.next_state_buffer[batch_indices])
+
         done_batch = tf.convert_to_tensor(self.done_buffer[batch_indices])
 
         self.update(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
@@ -267,6 +280,8 @@ class Actor(Model):
         # therefore we produce log stdev as output which can be [-inf, inf]
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
+
+        sigma = tf.clip_by_value(sigma, 0.0, 2.718)
 
         covar_m = tf.linalg.diag(sigma**2)
 
@@ -371,7 +386,9 @@ while t_steps < 10000000:
     while True:
         # env.render()
 
-        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(prev_state)), 0)
+        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(
+                                                            obs_norm(prev_state)), 0)
+                                                            # prev_state), 0)
 
         action, log_a = actor_model(tf_prev_state)
 
@@ -404,7 +421,9 @@ while t_steps < 10000000:
             while True:
                 # eval_env.render()
 
-                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(eval_prev_state)), 0)
+                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(
+                                                                        obs_norm(eval_prev_state)), 0)
+                                                                        # eval_prev_state), 0)
 
                 eval_action, eval_log_a = actor_model(eval_tf_prev_state, eval_mode=True)
 

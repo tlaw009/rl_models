@@ -16,10 +16,13 @@ tf.keras.backend.set_floatx('float64')
 EPSILON = 1e-10
 
 ################## GLOBAL SETUP P1 ##################
-
+rand_seed = 1929
 problem = "HalfCheetah-v2"
 env = gym.make(problem)
 eval_env = gym.make(problem)
+
+env.seed(rand_seed)
+eval_env.seed(rand_seed)
 
 num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states), flush=True)
@@ -245,6 +248,8 @@ class Actor(Model):
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
+        sigma = tf.clip_by_value(sigma, 0.0, 2.718)
+        
         covar_m = tf.linalg.diag(sigma**2)
 
         # dist = tfp.distributions.Normal(mu, sigma)
