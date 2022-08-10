@@ -299,10 +299,12 @@ class Actor(Model):
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
-        covar_m = tf.linalg.diag(sigma**2)
+        sigma = tf.clip_by_value(sigma, 0.0, 2.718)
 
-        # dist = tfp.distributions.Normal(mu, sigma)
-        dist = tfp.distributions.MultivariateNormalTriL(loc=mu, scale_tril=tf.linalg.cholesky(covar_m))
+        # covar_m = tf.linalg.diag(sigma**2)
+
+        dist = tfp.distributions.MultivariateNormalDiag(loc=mu, scale_diag=sigma)
+
         if eval_mode:
             action_ = mu
         else:

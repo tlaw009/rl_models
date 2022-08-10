@@ -41,6 +41,33 @@ def discounted_cumulative_sums(x, discount):
     # Discounted cumulative sums of vectors for computing rewards-to-go and advantage estimates
     return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
 
+NaN_found = False
+train_log = []
+log_len = 24
+log_index = 0
+
+def training_log(data):
+    global NaN_found, train_log, log_len, log_index
+
+    if not NaN_found:
+        if len(train_log) == log_len:
+            train_log[log_index] = data
+
+        if len(train_log) < log_len:
+            train_log.append(data)
+            
+        log_index = (log_index+1)%log_len
+        if True in tf.math.is_nan(data):
+            NaN_found = True
+            for x in train_log:
+                print("*********************", flush=True)
+                print("PA: ", x[0], flush=True)
+                print("TA: ", x[1], flush=True)
+                print("P_LOG: ", x[2], flush=True)
+                print("T_LOG: ", x[3], flush=True)
+                print("MU: ", x[4], flush=True)
+                print("SIGMA: ", x[5], flush=True)
+                print("*********************", flush=True)
 
 ##########*****####################*****##########
 
@@ -129,9 +156,12 @@ class Actor(Model):
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
-        covar_m = tf.linalg.diag(sigma**2)
+        sigma = tf.clip_by_value(sigma, 0.0, 2.718)
 
-        dist = tfp.distributions.MultivariateNormalTriL(loc=mu, scale_tril=tf.linalg.cholesky(covar_m))
+        # covar_m = tf.linalg.diag(sigma**2)
+
+        dist = tfp.distributions.MultivariateNormalDiag(loc=mu, scale_diag=sigma)
+
         if eval_mode:
             action_ = mu
         else:
@@ -142,6 +172,9 @@ class Actor(Model):
         log_pi_ = dist.log_prob(action_)
 
         log_pi = log_pi_ - tf.reduce_sum(tf.math.log(tf.clip_by_value(1 - action**2, EPSILON, 1.0)), axis=1)     
+
+        training_log([tf.reduce_mean(action_), tf.reduce_mean(action), tf.reduce_mean(log_pi_), tf.reduce_mean(log_pi)
+                    , tf.reduce_mean(mu), tf.reduce_mean(sigma)])
 
         return action*upper_bound, log_pi
 
@@ -167,7 +200,7 @@ gamma = 0.99
 clip_ratio = 0.2
 epochs = 500
 lam = 0.97
-target_kl = 0.01
+target_kl = 0.05
 beta = 1.0
 render = False
 
@@ -186,6 +219,8 @@ value_optimizer = tf.keras.optimizers.Adam(learning_rate=lr,
 
 buffer = Buffer(num_states, num_actions, horizon)
 
+eval_ep_reward_list = []
+eval_avg_reward_list = []
 
 ##########*****####################*****##########
 
@@ -201,22 +236,18 @@ def train_policy(
     global beta
     with tf.GradientTape() as tape:  # Record operations for automatic differentiation.
         action, log_a = actor_model(observation_buffer)
-        # print("A: ", tf.reduce_mean(action))
-        # print("LOG_A: ", tf.reduce_mean(log_a))
         ratio = tf.exp(
             log_a
             - logprobability_buffer
         )
-        # print("R: ", tf.reduce_mean(ratio), flush=True)
         cd_ratio = tf.clip_by_value(ratio, (1 - clip_ratio), (1 + clip_ratio))
         min_advantage = cd_ratio * advantage_buffer
 
         _kl = -beta*tf.math.reduce_max(logprobability_buffer - log_a)
         policy_loss = -tf.reduce_mean(tf.minimum(ratio * advantage_buffer, min_advantage) + _kl)
-        # print("LOSS: ", policy_loss)
     policy_grads = tape.gradient(policy_loss, actor_model.trainable_variables)
     policy_optimizer.apply_gradients(zip(policy_grads, actor_model.trainable_variables))
-    # print("GRAD: ", policy_grads[0], flush=True)
+
     action_opt, log_a_opt = actor_model(observation_buffer)
     kl = tf.reduce_mean(
         logprobability_buffer
@@ -236,10 +267,11 @@ def train_value_function(observation_buffer, return_buffer):
     value_grads = tape.gradient(value_loss, critic_model.trainable_variables)
     value_optimizer.apply_gradients(zip(value_grads, critic_model.trainable_variables))
 
+t_steps = 0
+RO_SIZE=1000 
+RO_index = 0
 
 for ite in range(iterations):
-
-
 
     for t in range(horizon):
         if render:
@@ -248,7 +280,6 @@ for ite in range(iterations):
 
         action, log_pi_a = actor_model(tf_observation)
         action = action[0]
-
         observation_new, reward, done, _ = env.step(action)
 
         episode_return += reward
@@ -288,6 +319,40 @@ for ite in range(iterations):
         )
 
         train_value_function(observation_buffer, return_buffer)
+
+        t_steps += 1
+        # print("T: ", t_steps)
+        if t_steps%RO_SIZE == 0:
+            eval_prev_state = eval_env.reset()
+            eval_ep_reward = 0
+
+            while True:
+                # eval_env.render()
+
+                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
+
+                eval_action, eval_log_a = actor_model(eval_tf_prev_state, eval_mode=True)
+
+                eval_action = eval_action[0]
+
+                # Recieve state and reward from environment.
+                eval_state, eval_reward, eval_done, info = eval_env.step(eval_action)
+
+                eval_ep_reward += eval_reward
+
+                if eval_done:
+                    break
+
+                eval_prev_state = eval_state
+
+            eval_ep_reward_list.append(eval_ep_reward)
+            eval_avg_reward = np.mean(eval_ep_reward_list)
+            print("Rollout * {} * Avg Reward is ==> {}".format(RO_index, eval_avg_reward), flush=True)
+            print("Rollout * {} * Epsiodic Reward is ==> {}".format(RO_index, eval_ep_reward), flush=True)
+            print("TOTAL STEPS: ", t_steps, flush=True)
+            eval_avg_reward_list.append(eval_avg_reward)
+            RO_index += 1 
+
 
     buffer.clear()
 
