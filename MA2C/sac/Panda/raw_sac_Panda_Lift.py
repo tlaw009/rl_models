@@ -89,43 +89,41 @@ def training_log(data):
         if True in tf.math.is_nan(data):
             NaN_found = True
             print("TRAINING INFO: ", train_log, flush=True)
+
 ###########################
 #Observation normalization#
 ###########################
 
-# obs_upper = np.zeros(num_states)
-# obs_lower = np.zeros(num_states)
+obs_upper = np.zeros(num_states)
+obs_lower = np.zeros(num_states)
 
-# def obs_norm(state_batch):
-#     if len(state_batch.shape) == 2:
-#         norm_state_batch = []
-#         for state in state_batch:
-#             norm_state = np.zeros(num_states)
-#             for i in range(num_states):
-#                 if state[i] > obs_upper[i]:
-#                     obs_upper[i] = state[i]
-#                 if state[i] < obs_lower[i]:
-#                     obs_lower[i] = state[i]
-#                 norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
-#             norm_state_batch.append(norm_state)
+def obs_norm(state_batch):
+    if len(state_batch.shape) == 2:
+        norm_state_batch = []
+        for state in state_batch:
+            norm_state = np.zeros(num_states)
+            for i in range(num_states):
+                if state[i] > obs_upper[i]:
+                    obs_upper[i] = state[i]
+                if state[i] < obs_lower[i]:
+                    obs_lower[i] = state[i]
+                norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
+            norm_state_batch.append(norm_state)
 
-#         return norm_state_batch
-#     else: 
-#         state = state_batch
-#         norm_state = np.zeros(num_states)
-#         for i in range(num_states):
-#             if state[i] > obs_upper[i]:
-#                 obs_upper[i] = state[i]
-#             if state[i] < obs_lower[i]:
-#                 obs_lower[i] = state[i]
-#             norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
+        return norm_state_batch
+    else: 
+        state = state_batch
+        norm_state = np.zeros(num_states)
+        for i in range(num_states):
+            if state[i] > obs_upper[i]:
+                obs_upper[i] = state[i]
+            if state[i] < obs_lower[i]:
+                obs_lower[i] = state[i]
+            norm_state[i] = state[i]/(obs_upper[i] - obs_lower[i]+EPSILON)
 
-#         return norm_state
+        return norm_state
 
-# print("State Normalization Initialized", flush=True)
-
-##########*****####################*****##########
-
+print("State Normalization Initialized", flush=True)
 
 #################### Replay Buffer ####################
 
@@ -257,11 +255,11 @@ class Buffer:
         batch_indices = np.random.choice(record_range, self.batch_size)
 
         # Convert to tensors
-        state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
+        state_batch = tf.convert_to_tensor(obs_norm(self.state_buffer[batch_indices]))
         action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
         reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
         reward_batch = tf.cast(reward_batch, dtype=tf.float64)
-        next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
+        next_state_batch = tf.convert_to_tensor(obs_norm(self.next_state_buffer[batch_indices]))
         done_batch = tf.convert_to_tensor(self.done_buffer[batch_indices])
 
         self.update(state_batch, action_batch, reward_batch, next_state_batch, done_batch)
@@ -299,7 +297,7 @@ class Actor(Model):
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
-        sigma = tf.clip_by_value(sigma, 0.0, 2.718)
+        sigma = tf.clip_by_value(sigma, 0.01, 2.718)
 
         # covar_m = tf.linalg.diag(sigma**2)
 
@@ -319,8 +317,7 @@ class Actor(Model):
         # Change log probability to account for tanh squashing as mentioned in
         # Appendix C of the paper
         log_pi = tf.expand_dims(log_pi_ - tf.reduce_sum(tf.math.log(tf.clip_by_value(1 - action**2, EPSILON, 1.0)), axis=1),
-                                    -1)        
-
+                                    -1)
         return action*upper_bound, log_pi
 
 def get_critic():
@@ -368,10 +365,10 @@ lr = 0.0003
 # critic2_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 # actor_optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.05, nesterov=False, name="SGD")
 
-alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+alpha_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=1.0)
+critic1_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=1.0)
+critic2_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=1.0)
+actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=1.0)
 
 total_episodes = 5000
 # Discount factor for future rewards
@@ -410,7 +407,7 @@ while t_steps < 1000000:
     while True:
         # env.render()
 
-        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
+        tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(prev_state)), 0)
 
         action, log_a = actor_model(tf_prev_state)
 
@@ -456,7 +453,7 @@ while t_steps < 1000000:
             while True:
                 # eval_env.render()
 
-                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(eval_prev_state), 0)
+                eval_tf_prev_state = tf.expand_dims(tf.convert_to_tensor(obs_norm(eval_prev_state)), 0)
 
                 eval_action, eval_log_a = actor_model(eval_tf_prev_state, eval_mode=True)
 

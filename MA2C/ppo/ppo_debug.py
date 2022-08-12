@@ -55,9 +55,10 @@ def training_log(data):
 
         if len(train_log) < log_len:
             train_log.append(data)
-            
+
         log_index = (log_index+1)%log_len
-        if True in tf.math.is_nan(data):
+
+        if True in [tf.math.is_nan(tf.reduce_mean(x)).numpy() for x in data]:
             NaN_found = True
             for x in train_log:
                 print("*********************", flush=True)
@@ -156,7 +157,7 @@ class Actor(Model):
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
-        sigma = tf.clip_by_value(sigma, 0.0, 2.718)
+        sigma = tf.clip_by_value(sigma, 0.01, 2.718)
 
         # covar_m = tf.linalg.diag(sigma**2)
 
@@ -173,8 +174,8 @@ class Actor(Model):
 
         log_pi = log_pi_ - tf.reduce_sum(tf.math.log(tf.clip_by_value(1 - action**2, EPSILON, 1.0)), axis=1)     
 
-        training_log([tf.reduce_mean(action_), tf.reduce_mean(action), tf.reduce_mean(log_pi_), tf.reduce_mean(log_pi)
-                    , tf.reduce_mean(mu), tf.reduce_mean(sigma)])
+        training_log([action_, action, log_pi_, log_pi
+                    , mu, sigma])
 
         return action*upper_bound, log_pi
 
@@ -195,10 +196,10 @@ def get_critic():
 
 # Hyperparameters of the PPO algorithm
 horizon = 2048
-iterations = 2000
+iterations = 20000
 gamma = 0.99
 clip_ratio = 0.2
-epochs = 500
+epochs = 50
 lam = 0.97
 target_kl = 0.05
 beta = 1.0

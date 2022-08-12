@@ -281,7 +281,7 @@ class Actor(Model):
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
 
-        sigma = tf.clip_by_value(sigma, 0.0, 2.718)
+        sigma = tf.clip_by_value(sigma, 0.01, 2.718)
 
         # covar_m = tf.linalg.diag(sigma**2)
 
