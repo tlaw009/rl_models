@@ -212,11 +212,11 @@ lr = 0.0003
 
 policy_optimizer = tf.keras.optimizers.Adam(learning_rate=lr,
                                                             # )
-                                                clipnorm=1.0)
+                                                clipnorm=0.01)
 
 value_optimizer = tf.keras.optimizers.Adam(learning_rate=lr,
                                                             # )
-                                                clipnorm=1.0)
+                                                clipnorm=0.01)
 
 buffer = Buffer(num_states, num_actions, horizon)
 
