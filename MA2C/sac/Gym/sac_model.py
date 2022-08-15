@@ -231,6 +231,7 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
+        self.sample_dist = tfp.distributions.MultivariateNormalDiag(loc=tf.zeros(num_actions), scale_diag=tf.ones(num_actions))
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
@@ -256,7 +257,7 @@ class Actor(Model):
         if eval_mode:
             action_ = mu
         else:
-            action_ = dist.sample()
+            action_ = tf.math.add(mu, tf.math.multiply(sigma, tf.cast(tf.expand_dims(self.sample_dist.sample(), 0), dtype=tf.float64)))
 
         # Apply the tanh squashing to keep the gaussian bounded in (-1,1)
         action = tf.tanh(action_)

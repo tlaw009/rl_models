@@ -62,12 +62,11 @@ def training_log(data):
             NaN_found = True
             for x in train_log:
                 print("*********************", flush=True)
-                print("PA: ", x[0], flush=True)
-                print("TA: ", x[1], flush=True)
-                print("P_LOG: ", x[2], flush=True)
-                print("T_LOG: ", x[3], flush=True)
-                print("MU: ", x[4], flush=True)
-                print("SIGMA: ", x[5], flush=True)
+                print("R: ", x[0], flush=True)
+                print("CD_R: ", x[1], flush=True)
+                print("_KL: ", x[2], flush=True)
+                print("POLICY_LOSS: ", x[3], flush=True)
+                print("POLICY_GRAD: ", x[4], flush=True)
                 print("*********************", flush=True)
 
 ##########*****####################*****##########
@@ -172,10 +171,7 @@ class Actor(Model):
 
         log_pi_ = dist.log_prob(action_)
 
-        log_pi = log_pi_ - tf.reduce_sum(tf.math.log(tf.clip_by_value(1 - action**2, EPSILON, 1.0)), axis=1)     
-
-        training_log([action_, action, log_pi_, log_pi
-                    , mu, sigma])
+        log_pi = log_pi_ - tf.reduce_sum(tf.math.log(tf.clip_by_value(1 - action**2, EPSILON, 1.0)), axis=1)
 
         return action*upper_bound, log_pi
 
@@ -195,11 +191,11 @@ def get_critic():
 #################### GLOBAL SETUP P2 ####################
 
 # Hyperparameters of the PPO algorithm
-horizon = 2048
-iterations = 20000
+horizon = 2000
+iterations = 500
 gamma = 0.99
 clip_ratio = 0.2
-epochs = 50
+epochs = 2000
 lam = 0.97
 target_kl = 0.05
 beta = 1.0
@@ -212,11 +208,11 @@ lr = 0.0003
 
 policy_optimizer = tf.keras.optimizers.Adam(learning_rate=lr,
                                                             # )
-                                                clipnorm=0.01)
+                                                clipnorm=1.0)
 
 value_optimizer = tf.keras.optimizers.Adam(learning_rate=lr,
                                                             # )
-                                                clipnorm=0.01)
+                                                clipnorm=1.0)
 
 buffer = Buffer(num_states, num_actions, horizon)
 
@@ -245,10 +241,11 @@ def train_policy(
         min_advantage = cd_ratio * advantage_buffer
 
         _kl = -beta*tf.math.reduce_max(logprobability_buffer - log_a)
-        policy_loss = -tf.reduce_mean(tf.minimum(ratio * advantage_buffer, min_advantage) + _kl)
+        policy_loss = -tf.reduce_mean(tf.minimum(ratio * advantage_buffer, min_advantage))
     policy_grads = tape.gradient(policy_loss, actor_model.trainable_variables)
     policy_optimizer.apply_gradients(zip(policy_grads, actor_model.trainable_variables))
-
+    training_log([ratio, cd_ratio, _kl, policy_loss
+                , policy_grads[0]])
     action_opt, log_a_opt = actor_model(observation_buffer)
     kl = tf.reduce_mean(
         logprobability_buffer
