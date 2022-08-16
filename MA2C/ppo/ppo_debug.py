@@ -64,7 +64,7 @@ def training_log(data):
                 print("*********************", flush=True)
                 print("R: ", x[0], flush=True)
                 print("CD_R: ", x[1], flush=True)
-                print("_KL: ", x[2], flush=True)
+                print("A: ", x[2], flush=True)
                 print("POLICY_LOSS: ", x[3], flush=True)
                 print("POLICY_GRAD: ", x[4], flush=True)
                 print("*********************", flush=True)
@@ -142,6 +142,7 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
+        self.sample_dist = tfp.distributions.MultivariateNormalDiag(loc=tf.zeros(num_actions), scale_diag=tf.ones(num_actions))
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
@@ -165,7 +166,7 @@ class Actor(Model):
         if eval_mode:
             action_ = mu
         else:
-            action_ = dist.sample()
+            action_ = tf.math.add(mu, tf.math.multiply(sigma, tf.expand_dims(self.sample_dist.sample(), 0)))
 
         action = tf.tanh(action_)
 
@@ -197,8 +198,6 @@ gamma = 0.99
 clip_ratio = 0.2
 epochs = 2000
 lam = 0.97
-target_kl = 0.05
-beta = 1.0
 render = False
 
 actor_model = Actor()
@@ -230,7 +229,6 @@ tf_observation = tf.expand_dims(observation, 0)
 def train_policy(
     observation_buffer, action_buffer, logprobability_buffer, advantage_buffer
 ):
-    global beta
     with tf.GradientTape() as tape:  # Record operations for automatic differentiation.
         action, log_a = actor_model(observation_buffer)
         ratio = tf.exp(
@@ -240,22 +238,16 @@ def train_policy(
         cd_ratio = tf.clip_by_value(ratio, (1 - clip_ratio), (1 + clip_ratio))
         min_advantage = cd_ratio * advantage_buffer
 
-        _kl = -beta*tf.math.reduce_max(logprobability_buffer - log_a)
         policy_loss = -tf.reduce_mean(tf.minimum(ratio * advantage_buffer, min_advantage))
     policy_grads = tape.gradient(policy_loss, actor_model.trainable_variables)
     policy_optimizer.apply_gradients(zip(policy_grads, actor_model.trainable_variables))
-    training_log([ratio, cd_ratio, _kl, policy_loss
+    training_log([ratio, cd_ratio, advantage_buffer, policy_loss
                 , policy_grads[0]])
     action_opt, log_a_opt = actor_model(observation_buffer)
     kl = tf.reduce_mean(
         logprobability_buffer
         - log_a_opt
     )
-
-    if kl < target_kl/1.5:
-        beta = beta/2
-    if kl > target_kl*1.5:
-        beta = beta*2
 
     return kl
 
