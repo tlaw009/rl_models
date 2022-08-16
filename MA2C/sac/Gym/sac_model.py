@@ -231,7 +231,7 @@ class Actor(Model):
     def __init__(self):
         super().__init__()
         self.action_dim = num_actions
-        self.sample_dist = tfp.distributions.MultivariateNormalDiag(loc=tf.zeros(num_actions), scale_diag=tf.ones(num_actions))
+        self.sample_dist = tfp.distributions.MultivariateNormalDiag(loc=tf.zeros(self.action_dim), scale_diag=tf.ones(self.action_dim))
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
