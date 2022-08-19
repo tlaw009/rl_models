@@ -206,12 +206,12 @@ critic_model = get_critic()
 lr = 0.0003
 
 policy_optimizer = tf.keras.optimizers.Adam(learning_rate=lr,
-                                                            # )
-                                                clipnorm=1.0)
+                                                            )
+                                                # clipnorm=1.0)
 
 value_optimizer = tf.keras.optimizers.Adam(learning_rate=lr,
-                                                            # )
-                                                clipnorm=1.0)
+                                                            )
+                                                # clipnorm=1.0)
 
 buffer = Buffer(num_states, num_actions, horizon)
 
