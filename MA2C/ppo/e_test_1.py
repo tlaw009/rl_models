@@ -26,9 +26,11 @@ lower_bound = env.action_space.low[0]
 
 ppo1 = PPO(env, num_states, num_actions, upper_bound, 1500)
 
-for i in range(100):
-	ppo1.train(1, 100)
+# ppo1.load_weights("/home/tony/rl_models/MA2C/ppo/weights/e_test_1_a.ckpt", "/home/tony/rl_models/MA2C/ppo/weights/e_test_1_c.ckpt")
+
+for i in range(1000):
+	ppo1.train(10, 100)
 	ppo1.eval_rollout(eval_env)
 
-ppo1.save_weights("~/rl_models/MA2C/ppo/weights/e_test_1_a.ckpt", "~/rl_models/MA2C/ppo/weights/e_test_1_c.ckpt")
+ppo1.save_weights("/home/tony/rl_models/MA2C/ppo/weights/e_test_1_a.ckpt", "/home/tony/rl_models/MA2C/ppo/weights/e_test_1_c.ckpt")
 

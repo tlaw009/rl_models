@@ -46,7 +46,7 @@ class PPO:
             for t in range(self.horizon):
                 
                 tf_obs = tf.expand_dims(obs, 0)
-                a, log_a = self.actor(tf_obs)
+                a, log_a, h_a = self.actor(tf_obs)
                 a=a[0]
             
                 obs_new, r, d, _ = self.env.step(a)
@@ -73,14 +73,14 @@ class PPO:
             
     def update(self, obs_b, adv_b, log_b, ret_b):
         with tf.GradientTape() as tape:
-            a, log_a = self.actor(obs_b)
+            a, log_a, h_a = self.actor(obs_b)
             ratio = tf.exp(log_a - log_b)
             c_ratio = tf.clip_by_value(ratio, 1.0-self.clip_epsilon, 1.0+self.clip_epsilon)
 
             rt_at = tf.minimum(tf.math.multiply(ratio, tf.cast(adv_b, tf.float32)), 
                                tf.math.multiply(c_ratio, tf.cast(adv_b, tf.float32)))
-
-            L_theta_clip = -tf.reduce_mean(rt_at)
+            
+            L_theta_clip = -tf.reduce_mean(rt_at+h_a)
         J_theta_clip = tape.gradient(L_theta_clip, self.actor.trainable_variables)
         self.p_opt.apply_gradients(zip(J_theta_clip, self.actor.trainable_variables))
         
@@ -127,7 +127,7 @@ class PPO:
 
             tf_eval_obs = tf.expand_dims(tf.convert_to_tensor(eval_obs), 0)
 
-            eval_a, eval_log_a = self.actor(tf_eval_obs, eval_mode=True)
+            eval_a, eval_log_a, eval_h_a = self.actor(tf_eval_obs, eval_mode=True)
 
             eval_a = eval_a[0]
 
