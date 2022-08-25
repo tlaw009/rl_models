@@ -104,22 +104,22 @@ class PPO:
         self.diagno_index = (self.diagno_index+1)%self.diagno_length
     def show_diagnostics(self):
         for i in range(len(self.diagnostics_buffer)):
-            print(self.diagnostics_buffer[(self.diagno_index+i)%len(self.diagnostics_buffer)])
+            print(self.diagnostics_buffer[(self.diagno_index+i)%len(self.diagnostics_buffer)], flush=True)
             
     def save_weights(self, a_path, c_path):
         self.actor.save_weights(a_path)
-        print("Saved actor weights")
+        print("Saved actor weights", flush=True)
         self.critic.save_weights(c_path)
-        print("Saved critic weights")
+        print("Saved critic weights", flush=True)
 
     def load_weights(self, a_path, c_path):
         try:
             self.actor.load_weights(a_path)
-            print("Loaded actor weights")
+            print("Loaded actor weights", flush=True)
             self.critic.load_weights(c_path)
-            print("Loaded critic weights")
+            print("Loaded critic weights", flush=True)
         except ValueError:
-            print("ERROR: Please make sure weights are saved as .ckpt")
+            print("ERROR: Please make sure weights are saved as .ckpt", flush=True)
             
         
     def eval_rollout(self, eval_env):
@@ -144,4 +144,4 @@ class PPO:
                 
             eval_obs = eval_obs_new
             
-        print("rollout episodic reward: ", eps_r)
+        print("rollout episodic reward: ", eps_r, flush=True)
