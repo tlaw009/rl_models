@@ -67,10 +67,13 @@ class PPO:
                     log_b,
                     r_b,
                 ) = self.buffer.batch_sample(self.critic)
-                self.update(obs_b, adv_b, log_b, ret_b)
+                p_l, c_l = self.update(obs_b, adv_b, log_b, ret_b)
+                self.record_diagnostics(["policy loss: ", np.array(p_l), "value loss: ", np.array(c_l)])
+                
             self.show_diagnostics()    
             self.buffer.clear()
-            
+    
+    @tf.function
     def update(self, obs_b, adv_b, log_b, ret_b):
         with tf.GradientTape() as tape:
             a, log_a, h_a = self.actor(obs_b)
@@ -89,7 +92,8 @@ class PPO:
             v_mse = tf.reduce_mean((v_theta - ret_b)**2)
         J_phi = tape1.gradient(v_mse, self.critic.trainable_variables)
         self.v_opt.apply_gradients(zip(J_phi, self.critic.trainable_variables))
-        self.record_diagnostics(["policy loss: ", np.array(L_theta_clip), "value loss: ", np.array(v_mse)])
+        
+        return L_theta_clip, v_mse
         
     def record_diagnostics(self, data):
         if len(self.diagnostics_buffer) == self.diagno_length:
@@ -100,22 +104,22 @@ class PPO:
         self.diagno_index = (self.diagno_index+1)%self.diagno_length
     def show_diagnostics(self):
         for i in range(len(self.diagnostics_buffer)):
-            print(self.diagnostics_buffer[(self.diagno_index+i)%len(self.diagnostics_buffer)], flush=True)
+            print(self.diagnostics_buffer[(self.diagno_index+i)%len(self.diagnostics_buffer)])
             
     def save_weights(self, a_path, c_path):
         self.actor.save_weights(a_path)
-        print("Saved actor weights", flush=True)
+        print("Saved actor weights")
         self.critic.save_weights(c_path)
-        print("Saved critic weights", flush=True)
+        print("Saved critic weights")
 
     def load_weights(self, a_path, c_path):
         try:
             self.actor.load_weights(a_path)
-            print("Loaded actor weights", flush=True)
+            print("Loaded actor weights")
             self.critic.load_weights(c_path)
-            print("Loaded critic weights", flush=True)
+            print("Loaded critic weights")
         except ValueError:
-            print("ERROR: Please make sure weights are saved as .ckpt", flush=True)
+            print("ERROR: Please make sure weights are saved as .ckpt")
             
         
     def eval_rollout(self, eval_env):
@@ -140,4 +144,4 @@ class PPO:
                 
             eval_obs = eval_obs_new
             
-        print("rollout episodic reward: ", eps_r, flush=True)
+        print("rollout episodic reward: ", eps_r)
