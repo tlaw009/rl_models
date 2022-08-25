@@ -32,6 +32,7 @@ class Actor(Model):
 
         log_sigma = self.stdev_layer(a2)
         sigma = tf.exp(log_sigma)
+        sigma = tf.clip_by_value(sigma, EPSILON, 2.718)
 
         dist = tfp.distributions.MultivariateNormalDiag(loc=mu, scale_diag=sigma)
         

@@ -29,7 +29,7 @@ ppo1 = PPO(env, num_states, num_actions, upper_bound, 1500)
 # ppo1.load_weights("/home/tony/rl_models/MA2C/ppo/weights/e_test_1_a.ckpt", "/home/tony/rl_models/MA2C/ppo/weights/e_test_1_c.ckpt")
 
 for i in range(1000):
-	ppo1.train(10, 100)
+	ppo1.train(1, 1000)
 	ppo1.eval_rollout(eval_env)
 
 ppo1.save_weights("/home/tony/rl_models/MA2C/ppo/weights/e_test_1_a.ckpt", "/home/tony/rl_models/MA2C/ppo/weights/e_test_1_c.ckpt")
