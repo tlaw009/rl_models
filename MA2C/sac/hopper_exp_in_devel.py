@@ -29,7 +29,7 @@ lower_bound = env.action_space.low[0]
 sac1 = SAC(env, num_states, num_actions, upper_bound, 1000000)
 sac1.load_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
 
-for i in range(1):
+for i in range(1000):
 	sac1.train(1000)
 	sac1.save_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
 	sac1.eval_rollout(eval_env)
