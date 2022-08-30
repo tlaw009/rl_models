@@ -10,7 +10,7 @@ import gym
 import scipy.signal
 import time
 from tensorflow.keras import Model
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import random
 import tensorflow_probability as tfp
 
@@ -142,11 +142,11 @@ class SAC:
     def load_weights(self, dir_path):
         try:
             self.a.load_weights(dir_path+"/a.ckpt")
-            print("Saved actor weights", flush=True)
+            print("Loaded actor weights", flush=True)
             self.c1.load_weights(dir_path+"/c1.ckpt")
-            print("Saved critic 1 weights", flush=True)
+            print("Loaded critic 1 weights", flush=True)
             self.c2.load_weights(dir_path+"/c2.ckpt")
-            print("Saved critic 2 weights", flush=True)
+            print("Loaded critic 2 weights", flush=True)
         except ValueError:
             print("ERROR: Please make sure weights are saved as .ckpt", flush=True)
             
@@ -171,5 +171,5 @@ class SAC:
                 break
                 
             eval_obs = eval_obs_new
-        env.close()
+        eval_env.close()
         print("rollout episodic reward: ", eps_r, flush=True)
