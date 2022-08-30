@@ -32,4 +32,4 @@ sac1.load_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
 for i in range(1000):
 	sac1.train(1000)
 	sac1.save_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
-	sac1.eval_rollout(eval_env)
+	sac1.eval_rollout(problem)

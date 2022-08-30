@@ -13,6 +13,7 @@ from tensorflow.keras import Model
 # import matplotlib.pyplot as plt
 import random
 import tensorflow_probability as tfp
+import glfw
 
 from wrappers.critic_wrapper import Critic_Wrapper
 from policies.gaussian_policy import Actor
@@ -150,10 +151,11 @@ class SAC:
         except ValueError:
             print("ERROR: Please make sure weights are saved as .ckpt", flush=True)
             
-    def eval_rollout(self, eval_env):
+    def eval_rollout(self, problem):
         eps_r = 0
+        eval_env = gym.make(problem)
         eval_obs = eval_env.reset()
-        
+
         while True:
             eval_env.render()
 
@@ -171,5 +173,7 @@ class SAC:
                 break
                 
             eval_obs = eval_obs_new
+
+        glfw.destroy_window(eval_env.viewer.window)
         eval_env.close()
         print("rollout episodic reward: ", eps_r, flush=True)
