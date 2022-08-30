@@ -46,4 +46,4 @@ class Actor(Model):
         log_pi_ = dist.log_prob(action_)     
         log_pi = log_pi_ - tf.reduce_sum(tf.math.log(tf.clip_by_value(1 - action**2, EPSILON, 1.0)), axis=1)
         
-        return action*self.upper_bound, log_pi, dist.entropy()
+        return action*self.upper_bound, log_pi
