@@ -93,8 +93,8 @@ class SAC:
             q2 = self.c2([s_b, a_b], training=True)
             na, nlog_a = self.a(ns_b, training=True)
             
-            tq1 = self.tc1([ns_b, na], training=True)
-            tq2 = self.tc2([ns_b, na], training=True)
+            tq1 = self.tc1([ns_b, na])
+            tq2 = self.tc2([ns_b, na])
             
             min_qt = tf.math.minimum(tq1,tq2)
             
