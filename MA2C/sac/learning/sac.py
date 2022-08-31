@@ -50,13 +50,13 @@ class SAC:
         
     def train(self, max_env_step):
         t = 0
-        epo = 0
+        a_losses = []
+        c1_losses = []
+        c2_losses = []
+        alpha_losses = []
         while t < max_env_step:
             p_s = self.env.reset()
-            a_losses = []
-            c1_losses = []
-            c2_losses = []
-            alpha_losses = []
+
             while True:
                 a, log_a = self.a(tf.expand_dims(p_s, 0))
                 a=a[0]
@@ -79,11 +79,10 @@ class SAC:
                     break
                 p_s = s
                 
-            print("Epoch {:04d}".format(epo), "Policy Avg. Loss: ", np.mean(a_losses), 
-                  ", Critic 1 Avg. Loss: ",  np.mean(c1_losses), 
-                  ", Critic 2 Avg. Loss: ",  np.mean(c2_losses), 
-                  ", Alpha 1 Avg. Loss: ",  np.mean(alpha_losses), flush=True)
-            epo = epo+1
+        print("Per {:04d} Steps".format(max_env_step), "Policy Avg. Loss: ", np.mean(a_losses), 
+              ", Critic 1 Avg. Loss: ",  np.mean(c1_losses), 
+              ", Critic 2 Avg. Loss: ",  np.mean(c2_losses), 
+              ", Alpha 1 Avg. Loss: ",  np.mean(alpha_losses), flush=True)
 
 
     @tf.function
