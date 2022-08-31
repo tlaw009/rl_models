@@ -16,7 +16,7 @@ import tensorflow_probability as tfp
 
 from learning.sac import SAC
 
-problem = "Hopper-v3"
+problem = "Humanoid-v3"
 env = gym.make(problem)
 eval_env = gym.make(problem)
 
@@ -29,7 +29,7 @@ lower_bound = env.action_space.low[0]
 sac1 = SAC(env, num_states, num_actions, upper_bound, 1000000)
 # sac1.load_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
 eval_r = []
-for i in range(5):
+for i in range(10000):
 	sac1.train(1000)
 	sac1.save_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
 	eval_r.append(sac1.eval_rollout(problem))
