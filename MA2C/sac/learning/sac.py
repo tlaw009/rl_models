@@ -133,21 +133,30 @@ class SAC:
         return L_a, L_c1, L_c2, L_alpha
     
     def save_weights(self, dir_path):
+        cp = tf.train.Checkpoint(step=self.alpha)
         self.a.save_weights(dir_path+"/a.ckpt")
         print("Saved actor weights", flush=True)
         self.c1.save_weights(dir_path+"/c1.ckpt")
         print("Saved critic 1 weights", flush=True)
         self.c2.save_weights(dir_path+"/c2.ckpt")
         print("Saved critic 2 weights", flush=True)
+        cp.save(dir_path+"/alpha")
+        print("Saved alpha weights", flush=True)
 
     def load_weights(self, dir_path):
         try:
+            cp = tf.train.Checkpoint(step=self.alpha)
             self.a.load_weights(dir_path+"/a.ckpt")
             print("Loaded actor weights", flush=True)
             self.c1.load_weights(dir_path+"/c1.ckpt")
             print("Loaded critic 1 weights", flush=True)
             self.c2.load_weights(dir_path+"/c2.ckpt")
             print("Loaded critic 2 weights", flush=True)
+            cp.restore(dir_path+"/alpha-1")
+            print("Loaded alpha weights", flush=True)
+            self.tc1.set_weights(self.c1.get_weights())
+            self.tc2.set_weights(self.c2.get_weights())
+
         except ValueError:
             print("ERROR: Please make sure weights are saved as .ckpt", flush=True)
             
@@ -177,3 +186,5 @@ class SAC:
         glfw.destroy_window(eval_env.viewer.window)
         eval_env.close()
         print("rollout episodic reward: ", eps_r, flush=True)
+        
+        return eps_r

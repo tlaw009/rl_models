@@ -27,9 +27,14 @@ lower_bound = env.action_space.low[0]
 
 
 sac1 = SAC(env, num_states, num_actions, upper_bound, 1000000)
-sac1.load_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
-
+# sac1.load_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
+eval_r = []
 for i in range(5):
 	sac1.train(1000)
 	sac1.save_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
-	sac1.eval_rollout(problem)
+	eval_r.append(sac1.eval_rollout(problem))
+
+plt.plot(eval_r)
+plt.xlabel("per 1000 steps")
+plt.ylabel("Evaluation episodic reward")
+plt.show()
