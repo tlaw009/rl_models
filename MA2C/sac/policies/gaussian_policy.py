@@ -23,14 +23,15 @@ class Actor(Model):
         self.action_dim, self.upper_bound = action_dimensions, action_bound
         self.sample_dist = tfp.distributions.MultivariateNormalDiag(loc=tf.zeros(self.action_dim),
                                                                     scale_diag=tf.ones(self.action_dim))
+        self.input_batch_norm = layers.BatchNormalization()
         self.dense1_layer = layers.Dense(256, activation="relu")
         self.dense2_layer = layers.Dense(256, activation="relu")
         self.mean_layer = layers.Dense(self.action_dim)
         self.stdev_layer = layers.Dense(self.action_dim)
 
     def call(self, state, eval_mode=False):
-
-        a1 = self.dense1_layer(state)
+        norm_state = self.input_batch_norm(state)
+        a1 = self.dense1_layer(norm_state)
         a2 = self.dense2_layer(a1)
         mu = self.mean_layer(a2)
 

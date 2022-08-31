@@ -89,12 +89,12 @@ class SAC:
     def update(self, data):
         s_b, a_b, r_b, ns_b, d_b = data
         with tf.GradientTape() as tape_c1, tf.GradientTape() as tape_c2:
-            q1 = self.c1([s_b, a_b])
-            q2 = self.c2([s_b, a_b])
-            na, nlog_a = self.a(ns_b)
+            q1 = self.c1([s_b, a_b], training=True)
+            q2 = self.c2([s_b, a_b], training=True)
+            na, nlog_a = self.a(ns_b, training=True)
             
-            tq1 = self.tc1([ns_b, na])
-            tq2 = self.tc2([ns_b, na])
+            tq1 = self.tc1([ns_b, na], training=True)
+            tq2 = self.tc2([ns_b, na], training=True)
             
             min_qt = tf.math.minimum(tq1,tq2)
             
@@ -116,9 +116,9 @@ class SAC:
             tc2w.assign(tc2w*self.tau + c2w*(1.0-self.tau))
             
         with tf.GradientTape() as tape_a, tf.GradientTape() as tape_alpha:
-            a, log_a = self.a(s_b)
-            qa1 = self.c1([s_b, a])
-            qa2 = self.c2([s_b, a])
+            a, log_a = self.a(s_b, training=True)
+            qa1 = self.c1([s_b, a], training=True)
+            qa2 = self.c2([s_b, a], training=True)
             
             soft_qa = tf.math.minimum(qa1,qa2)
 
