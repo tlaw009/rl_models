@@ -10,7 +10,7 @@ import gym
 import scipy.signal
 import time
 from tensorflow.keras import Model
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import random
 import tensorflow_probability as tfp
 
@@ -29,7 +29,5 @@ lower_bound = env.action_space.low[0]
 sac1 = SAC(env, num_states, num_actions, upper_bound, 1000000)
 sac1.load_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
 
-for i in range(5):
-	sac1.train(1000)
-	sac1.save_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
+for i in range(10):
 	sac1.eval_rollout(problem)
