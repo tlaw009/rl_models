@@ -121,8 +121,8 @@ class SAC:
             qa1 = self.c1([s_b, a])
             qa2 = self.c2([s_b, a])
             
-            soft_qa = tf.reduce_mean([qa1,qa2], axis=0)
-            
+            soft_qa = tf.math.minimum(qa1,qa2)
+
             L_a = -tf.reduce_mean(soft_qa-self.alpha*log_a)
             L_alpha = -tf.reduce_mean(self.alpha*tf.stop_gradient(log_a + self.te))
         grad_a = tape_a.gradient(L_a, self.a.trainable_variables)
