@@ -89,8 +89,8 @@ class SAC:
     def update(self, data):
         s_b, a_b, r_b, ns_b, d_b = data
         with tf.GradientTape() as tape_c1, tf.GradientTape() as tape_c2:
-            q1 = self.c1([s_b, a_b], training=True)
-            q2 = self.c2([s_b, a_b], training=True)
+            q1 = self.c1([s_b, a_b])
+            q2 = self.c2([s_b, a_b])
             na, nlog_a = self.a(ns_b, training=True)
             
             tq1 = self.tc1([ns_b, na])
@@ -117,8 +117,8 @@ class SAC:
             
         with tf.GradientTape() as tape_a, tf.GradientTape() as tape_alpha:
             a, log_a = self.a(s_b, training=True)
-            qa1 = self.c1([s_b, a], training=True)
-            qa2 = self.c2([s_b, a], training=True)
+            qa1 = self.c1([s_b, a])
+            qa2 = self.c2([s_b, a])
             
             soft_qa = tf.math.minimum(qa1,qa2)
 

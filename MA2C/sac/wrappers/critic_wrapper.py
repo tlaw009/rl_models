@@ -22,8 +22,7 @@ class Critic_Wrapper():
     def get_critic(self):
         # State as input
         state_input = layers.Input(shape=(self.s_dim))
-        state_input_norm = layers.BatchNormalization()(state_input)
-        state_out = layers.Dense(128, activation="relu")(state_input_norm)
+        state_out = layers.Dense(128, activation="relu")(state_input)
 
         # Action as input
         action_input = layers.Input(shape=(self.a_dim))
