@@ -159,13 +159,14 @@ class SAC:
         except ValueError:
             print("ERROR: Please make sure weights are saved as .ckpt", flush=True)
             
-    def eval_rollout(self, problem):
+    def eval_rollout(self, problem, render=False):
         eps_r = 0
         eval_env = gym.make(problem)
         eval_obs = eval_env.reset()
 
         while True:
-            eval_env.render()
+            if render:
+                eval_env.render()
 
             tf_eval_obs = tf.expand_dims(tf.convert_to_tensor(eval_obs), 0)
 
@@ -181,8 +182,9 @@ class SAC:
                 break
                 
             eval_obs = eval_obs_new
-
-        glfw.destroy_window(eval_env.viewer.window)
+        
+        if render:
+            glfw.destroy_window(eval_env.viewer.window)
         eval_env.close()
         print("rollout episodic reward: ", eps_r, flush=True)
         
