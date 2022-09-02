@@ -30,4 +30,4 @@ sac1 = SAC(env, num_states, num_actions, upper_bound, 1000000)
 sac1.load_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
 
 for i in range(10):
-	sac1.eval_rollout(problem)
+	sac1.eval_rollout(problem, render=True)

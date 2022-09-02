@@ -159,9 +159,15 @@ class SAC:
         except ValueError:
             print("ERROR: Please make sure weights are saved as .ckpt", flush=True)
             
-    def eval_rollout(self, problem, render=False):
+    def eval_rollout(self, problem, rbs=False, render=False):
         eps_r = 0
-        eval_env = gym.make(problem)
+        
+        if rbs:
+            domain, task, controller = problem
+            eval_env = Robosuite_Wrapper(domain, task, controller)
+        else:
+            eval_env = gym.make(problem)
+            
         eval_obs = eval_env.reset()
 
         while True:
