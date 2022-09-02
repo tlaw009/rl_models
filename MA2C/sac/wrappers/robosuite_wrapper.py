@@ -42,7 +42,7 @@ class Robosuite_Wrapper():
             else:
                 obs_dim.append(self.env.observation_spec()[x].shape[0])
                 
-        self.s_dim = np.sum(obs_dim,dtype=np.int32)
+        self.s_dim = int(np.sum(obs_dim,dtype=np.int32))
         self.a_dim = self.env.action_dim
         self.a_ub = self.env.action_spec[1][0]
         self.a_lb = self.env.action_spec[0][0]

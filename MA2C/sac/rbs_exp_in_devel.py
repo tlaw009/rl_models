@@ -22,7 +22,7 @@ rbs_env = Robosuite_Wrapper("Sawyer", "Door", "JOINT_VELOCITY")
 
 num_states, num_actions, upper_bound, lower_bound = rbs_env.env_specs()
 
-sac1 = SAC(rbs_env, int(num_states), num_actions, upper_bound, 1000000)
+sac1 = SAC(rbs_env, num_states, num_actions, upper_bound, 1000000)
 
 eval_r = []
 for i in range(3000):
