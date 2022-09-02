@@ -18,6 +18,7 @@ import glfw
 from wrappers.critic_wrapper import Critic_Wrapper
 from policies.gaussian_policy import Actor
 from replay_buffer.r_buffer_sac import Buffer
+from wrappers.robosuite_wrapper import Robosuite_Wrapper
 
 class SAC:
     
