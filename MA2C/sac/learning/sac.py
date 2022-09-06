@@ -165,7 +165,7 @@ class SAC:
         
         if rbs:
             domain, task, controller = problem
-            eval_env = Robosuite_Wrapper(domain, task, controller)
+            eval_env = Robosuite_Wrapper(domain, task, controller, render)
         else:
             eval_env = gym.make(problem)
             
@@ -191,7 +191,9 @@ class SAC:
             eval_obs = eval_obs_new
         
         if render:
-            glfw.destroy_window(eval_env.viewer.window)
+            if not rbs:
+                glfw.destroy_window(eval_env.viewer.window)
+
         eval_env.close()
         print("rollout episodic reward: ", eps_r, flush=True)
         

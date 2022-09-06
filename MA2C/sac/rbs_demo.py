@@ -18,7 +18,7 @@ from learning.sac import SAC
 from wrappers.robosuite_wrapper import Robosuite_Wrapper
 
 problem = ("Sawyer", "Door", "JOINT_VELOCITY")
-rbs_env = Robosuite_Wrapper("Sawyer", "Door", "JOINT_VELOCITY", True)
+rbs_env = Robosuite_Wrapper("Sawyer", "Door", "JOINT_VELOCITY")
 
 num_states, num_actions, upper_bound, lower_bound = rbs_env.env_specs()
 
