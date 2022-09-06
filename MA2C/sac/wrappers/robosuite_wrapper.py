@@ -21,12 +21,12 @@ from robosuite import load_controller_config
 
 class Robosuite_Wrapper():
 
-    def __init__(self, domain, task, controller):
+    def __init__(self, domain, task, controller, render=False):
         self.config = load_controller_config(default_controller=controller)
         self.env = suite.make(env_name=task, # try with other tasks like "Stack" and "Door"
                             robots=domain,  # try with other robots like "Sawyer" and "Jaco"
                             controller_configs=self.config,
-                            has_renderer=False,
+                            has_renderer=render,
                             ignore_done=False,
                             has_offscreen_renderer=False,
                             use_camera_obs=False,
