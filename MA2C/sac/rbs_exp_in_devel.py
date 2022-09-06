@@ -28,7 +28,7 @@ eval_r = []
 for i in range(3000):
 	sac1.train(1000)
 	sac1.save_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
-	eval_r.append(sac1.eval_rollout(problem,rbs=True))
+	eval_r.append(sac1.eval_rollout(problem,rbs=True, render=True))
 
 plt.plot(eval_r)
 plt.xlabel("per 1000 steps")
