@@ -27,4 +27,4 @@ sac1.load_weights(os.path.dirname(os.path.abspath(__file__))+"/weights")
 
 
 for i in range(10):
-	sac1.eval_rollout(problem, render=True)
+	sac1.eval_rollout(problem, rbs=True, render=True)
