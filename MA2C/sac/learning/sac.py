@@ -26,7 +26,7 @@ class SAC:
                  minibatch_size=256, gamma=0.99, tau=0.95, lr=3e-4):
         
         self.env = env
-        
+        tf.debugging.enable_check_numerics()
         self.a = Actor(action_dimensions, action_bound)
         self.c_gen = Critic_Wrapper(observation_dimensions, action_dimensions)
         self.c1 = self.c_gen.get_critic()
