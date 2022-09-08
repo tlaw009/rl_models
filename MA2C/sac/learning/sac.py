@@ -26,7 +26,6 @@ class SAC:
                  minibatch_size=256, gamma=0.99, tau=0.95, lr=3e-4):
         
         self.env = env
-        tf.debugging.enable_check_numerics()
         self.a = Actor(action_dimensions, action_bound)
         self.c_gen = Critic_Wrapper(observation_dimensions, action_dimensions)
         self.c1 = self.c_gen.get_critic()
@@ -88,6 +87,7 @@ class SAC:
 
     @tf.function
     def update(self, data):
+        tf.debugging.enable_check_numerics()
         s_b, a_b, r_b, ns_b, d_b = data
         with tf.GradientTape() as tape_c1, tf.GradientTape() as tape_c2:
             q1 = self.c1([s_b, a_b])
@@ -129,6 +129,8 @@ class SAC:
         grad_alpha = tape_alpha.gradient(L_alpha, [self.alpha])
         self.a_opt.apply_gradients(zip(grad_a, self.a.trainable_variables))
         self.alpha_opt.apply_gradients(zip(grad_alpha, [self.alpha]))
+        
+        tf.debugging.disable_check_numerics()
         
         return L_a, L_c1, L_c2, L_alpha
     

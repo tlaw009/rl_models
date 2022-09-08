@@ -131,3 +131,4 @@ dmypy.json
 **/MUJOCO_LOG.TXT
 **/debug.out
 **/.DS_store
+**/test_out/**
