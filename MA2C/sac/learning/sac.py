@@ -148,11 +148,11 @@ class SAC:
     def load_weights(self, dir_path):
         try:
             cp = tf.train.Checkpoint(step=self.alpha)
-            self.a.load_weights(dir_path+"/a.ckpt")
+            self.a.load_weights(dir_path+"/a.ckpt").expect_partial()
             print("Loaded actor weights", flush=True)
-            self.c1.load_weights(dir_path+"/c1.ckpt")
+            self.c1.load_weights(dir_path+"/c1.ckpt").expect_partial()
             print("Loaded critic 1 weights", flush=True)
-            self.c2.load_weights(dir_path+"/c2.ckpt")
+            self.c2.load_weights(dir_path+"/c2.ckpt").expect_partial()
             print("Loaded critic 2 weights", flush=True)
             cp.restore(dir_path+"/alpha-1")
             print("Loaded alpha weights", flush=True)
